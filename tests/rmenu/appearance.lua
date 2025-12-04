@@ -144,6 +144,85 @@ local persistence = {
     slots = { "Profil A", "Profil B", "Profil C", "Profil D" },
 }
 
+local function getPlayerPed()
+    return PlayerPedId()
+end
+
+local function applyHeritage()
+    local ped = getPlayerPed()
+    local father = heritage.father - 1
+    local mother = heritage.mother - 1
+    local shapeMix = (heritage.resemblance - 1) / 10
+    local skinMix = (heritage.skinTone - 1) / 10
+
+    SetPedHeadBlendData(ped, mother, father, 0, mother, father, 0, shapeMix, skinMix, 0.0, true)
+end
+
+local function applyFaceFeatures()
+    local ped = getPlayerPed()
+    local featureValues = {
+        features.nose,
+        features.noseProfile,
+        features.noseTip,
+        features.cheeks,
+        features.lips,
+        features.jaw,
+        features.chin,
+        features.eyes,
+    }
+
+    for i, value in ipairs(featureValues) do
+        SetPedFaceFeature(ped, i - 1, (value - 5) / 5)
+    end
+end
+
+local function applyPedAppearance()
+    local ped = getPlayerPed()
+    local hair = appearance.hairStyle - 1
+    SetPedComponentVariation(ped, 2, hair, 0, 0)
+    SetPedHairColor(ped, appearance.hairColor - 1, appearance.hairHighlight - 1)
+
+    SetPedHeadOverlay(ped, 2, appearance.eyebrows - 1, appearance.eyebrowsOpacity / 10.0)
+    SetPedHeadOverlayColor(ped, 2, 1, appearance.hairColor - 1, appearance.hairHighlight - 1)
+
+    SetPedHeadOverlay(ped, 4, appearance.makeupStyle - 1, appearance.makeupOpacity / 10.0)
+    SetPedHeadOverlayColor(ped, 4, 2, appearance.makeupStyle - 1, 0)
+
+    SetPedHeadOverlay(ped, 8, appearance.lipstickStyle - 1, appearance.lipstickOpacity / 10.0)
+    SetPedHeadOverlayColor(ped, 8, 2, appearance.lipstickStyle - 1, 0)
+
+    SetPedHeadOverlay(ped, 0, appearance.blemishes - 1, 1.0)
+    SetPedHeadOverlay(ped, 3, appearance.ageing - 1, 1.0)
+end
+
+local function applyWardrobe()
+    local ped = getPlayerPed()
+    SetPedComponentVariation(ped, 8, wardrobe.tshirt - 1, 0, 0)
+    SetPedComponentVariation(ped, 11, wardrobe.torso - 1, 0, 0)
+    SetPedComponentVariation(ped, 3, wardrobe.jacket - 1, 0, 0)
+    SetPedComponentVariation(ped, 4, wardrobe.pants - 1, 0, 0)
+    SetPedComponentVariation(ped, 6, wardrobe.shoes - 1, 0, 0)
+end
+
+local function applyProps()
+    local ped = getPlayerPed()
+
+    local function setProp(propId, index, options)
+        local selectedLabel = options[index]
+        if selectedLabel == "Sans" then
+            ClearPedProp(ped, propId)
+        else
+            SetPedPropIndex(ped, propId, index - 1, 0, true)
+        end
+    end
+
+    setProp(0, props.hats, propOptions.hats)
+    setProp(1, props.glasses, propOptions.glasses)
+    setProp(2, props.ears, propOptions.ears)
+    setProp(6, props.watches, propOptions.watches)
+    setProp(7, props.bracelets, propOptions.bracelets)
+end
+
 local function applyModel(model)
     if not model then return end
     local hash = GetHashKey(model)
@@ -153,6 +232,13 @@ local function applyModel(model)
     end
     SetPlayerModel(PlayerId(), hash)
     SetModelAsNoLongerNeeded(hash)
+
+    -- Re-apply the customization after swapping ped models
+    applyHeritage()
+    applyFaceFeatures()
+    applyPedAppearance()
+    applyWardrobe()
+    applyProps()
 end
 
 RageUI.CreateWhile(1.0, function()
@@ -174,15 +260,19 @@ RageUI.CreateWhile(1.0, function()
         RageUI.DrawContent({ header = true, glare = true, instructionalButton = true }, function()
             RageUI.List("Père", parents.fathers, heritage.father, "Sélectionnez le parent masculin.", {}, true, function(_, _, _, Index)
                 heritage.father = Index
+                applyHeritage()
             end)
             RageUI.List("Mère", parents.mothers, heritage.mother, "Sélectionnez le parent féminin.", {}, true, function(_, _, _, Index)
                 heritage.mother = Index
+                applyHeritage()
             end)
             RageUI.SliderProgress("Ressemblance", heritage.resemblance, 10, "0 = mère, 10 = père.", {}, true, function(_, _, _, Index)
                 heritage.resemblance = Index
+                applyHeritage()
             end)
             RageUI.SliderProgress("Couleur de peau", heritage.skinTone, 10, "Mélange des carnations.", {}, true, function(_, _, _, Index)
                 heritage.skinTone = Index
+                applyHeritage()
             end)
         end)
     end
@@ -192,27 +282,35 @@ RageUI.CreateWhile(1.0, function()
             RageUI.Separator("~b~Détails du visage")
             RageUI.SliderProgress("Nez", features.nose, 10, "Largeur et hauteur.", {}, true, function(_, _, _, Index)
                 features.nose = Index
+                applyFaceFeatures()
             end)
             RageUI.SliderProgress("Profil du nez", features.noseProfile, 10, "Pont et cambrure.", {}, true, function(_, _, _, Index)
                 features.noseProfile = Index
+                applyFaceFeatures()
             end)
             RageUI.SliderProgress("Pointe du nez", features.noseTip, 10, "Affinement de la pointe.", {}, true, function(_, _, _, Index)
                 features.noseTip = Index
+                applyFaceFeatures()
             end)
             RageUI.SliderProgress("Joues", features.cheeks, 10, "Creux ou volume.", {}, true, function(_, _, _, Index)
                 features.cheeks = Index
+                applyFaceFeatures()
             end)
             RageUI.SliderProgress("Lèvres", features.lips, 10, "Épaisseur et forme.", {}, true, function(_, _, _, Index)
                 features.lips = Index
+                applyFaceFeatures()
             end)
             RageUI.SliderProgress("Mâchoire", features.jaw, 10, "Largeur de la mâchoire.", {}, true, function(_, _, _, Index)
                 features.jaw = Index
+                applyFaceFeatures()
             end)
             RageUI.SliderProgress("Menton", features.chin, 10, "Longueur et creux.", {}, true, function(_, _, _, Index)
                 features.chin = Index
+                applyFaceFeatures()
             end)
             RageUI.SliderProgress("Yeux", features.eyes, 10, "Ouverture et rotation.", {}, true, function(_, _, _, Index)
                 features.eyes = Index
+                applyFaceFeatures()
             end)
         end)
     end
@@ -222,42 +320,53 @@ RageUI.CreateWhile(1.0, function()
             RageUI.Separator("~b~Cheveux")
             RageUI.List("Style", hairStyles, appearance.hairStyle, "Choisissez une coupe.", {}, true, function(_, _, _, Index)
                 appearance.hairStyle = Index
+                applyPedAppearance()
             end)
             RageUI.List("Couleur", hairColors, appearance.hairColor, "Teinte principale.", {}, true, function(_, _, _, Index)
                 appearance.hairColor = Index
+                applyPedAppearance()
             end)
             RageUI.List("Mèches", hairColors, appearance.hairHighlight, "Couleur secondaire.", {}, true, function(_, _, _, Index)
                 appearance.hairHighlight = Index
+                applyPedAppearance()
             end)
 
             RageUI.Separator("~b~Sourcils")
             RageUI.List("Forme", eyebrows, appearance.eyebrows, "Style de sourcil.", {}, true, function(_, _, _, Index)
                 appearance.eyebrows = Index
+                applyPedAppearance()
             end)
             RageUI.Slider("Opacité", appearance.eyebrowsOpacity, 10, "Intensité des sourcils.", false, {}, true, function(_, _, _, Index)
                 appearance.eyebrowsOpacity = Index
+                applyPedAppearance()
             end)
 
             RageUI.Separator("~b~Maquillage")
             RageUI.List("Maquillage", makeups, appearance.makeupStyle, "Sélection du style.", {}, true, function(_, _, _, Index)
                 appearance.makeupStyle = Index
+                applyPedAppearance()
             end)
             RageUI.Slider("Opacité maquillage", appearance.makeupOpacity, 10, "Appliquer ou atténuer.", false, {}, true, function(_, _, _, Index)
                 appearance.makeupOpacity = Index
+                applyPedAppearance()
             end)
             RageUI.List("Rouge à lèvres", lipsticks, appearance.lipstickStyle, "Couleur des lèvres.", {}, true, function(_, _, _, Index)
                 appearance.lipstickStyle = Index
+                applyPedAppearance()
             end)
             RageUI.Slider("Opacité lèvres", appearance.lipstickOpacity, 10, "Intensité du rouge à lèvres.", false, {}, true, function(_, _, _, Index)
                 appearance.lipstickOpacity = Index
+                applyPedAppearance()
             end)
 
             RageUI.Separator("~b~Imperfections")
             RageUI.Slider("Imperfections", appearance.blemishes, 10, "Tâches ou grain de peau.", false, {}, true, function(_, _, _, Index)
                 appearance.blemishes = Index
+                applyPedAppearance()
             end)
             RageUI.Slider("Rides / Ageing", appearance.ageing, 10, "Signes de l'âge.", false, {}, true, function(_, _, _, Index)
                 appearance.ageing = Index
+                applyPedAppearance()
             end)
         end)
     end
@@ -267,18 +376,23 @@ RageUI.CreateWhile(1.0, function()
             RageUI.Separator("~b~Tenue de base")
             RageUI.List("T-shirt", wardrobeOptions.tshirts, wardrobe.tshirt, "Couche intérieure.", {}, true, function(_, _, _, Index)
                 wardrobe.tshirt = Index
+                applyWardrobe()
             end)
             RageUI.List("Torse", wardrobeOptions.torsos, wardrobe.torso, "Couche principale.", {}, true, function(_, _, _, Index)
                 wardrobe.torso = Index
+                applyWardrobe()
             end)
             RageUI.List("Veste", wardrobeOptions.jackets, wardrobe.jacket, "Couche extérieure.", {}, true, function(_, _, _, Index)
                 wardrobe.jacket = Index
+                applyWardrobe()
             end)
             RageUI.List("Pantalon", wardrobeOptions.pants, wardrobe.pants, "Bas du corps.", {}, true, function(_, _, _, Index)
                 wardrobe.pants = Index
+                applyWardrobe()
             end)
             RageUI.List("Chaussures", wardrobeOptions.shoes, wardrobe.shoes, "Choix de chaussures.", {}, true, function(_, _, _, Index)
                 wardrobe.shoes = Index
+                applyWardrobe()
             end)
         end)
     end
@@ -288,18 +402,23 @@ RageUI.CreateWhile(1.0, function()
             RageUI.Separator("~b~Accessoires")
             RageUI.List("Chapeaux", propOptions.hats, props.hats, "Ajoutez un couvre-chef.", {}, true, function(_, _, _, Index)
                 props.hats = Index
+                applyProps()
             end)
             RageUI.List("Lunettes", propOptions.glasses, props.glasses, "Lunettes et montures.", {}, true, function(_, _, _, Index)
                 props.glasses = Index
+                applyProps()
             end)
             RageUI.List("Oreilles", propOptions.ears, props.ears, "Boucles ou studs.", {}, true, function(_, _, _, Index)
                 props.ears = Index
+                applyProps()
             end)
             RageUI.List("Montres", propOptions.watches, props.watches, "Choisissez un poignet.", {}, true, function(_, _, _, Index)
                 props.watches = Index
+                applyProps()
             end)
             RageUI.List("Bracelets", propOptions.bracelets, props.bracelets, "Accessoire de poignet.", {}, true, function(_, _, _, Index)
                 props.bracelets = Index
+                applyProps()
             end)
         end)
     end
