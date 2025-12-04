@@ -3,6 +3,7 @@
 ---
 
 local menuName = 'appearance'
+local toggleCommand = 'appearance-menu'
 
 RMenu.Add(menuName, 'main', RageUI.CreateMenu("APPARENCE PERSONNAGE", "Création de personnage"))
 RMenu:Get(menuName, 'main'):SetSubtitle("~b~Créateur style GTA Online")
@@ -16,6 +17,18 @@ RMenu.Add(menuName, 'props', RageUI.CreateSubMenu(RMenu:Get(menuName, 'main'), "
 RMenu.Add(menuName, 'model', RageUI.CreateSubMenu(RMenu:Get(menuName, 'main'), "MODÈLE", "Modèles Freemode"))
 RMenu.Add(menuName, 'outfits', RageUI.CreateSubMenu(RMenu:Get(menuName, 'main'), "TENUES", "Emplacements sauvegardés"))
 RMenu.Add(menuName, 'persistence', RageUI.CreateSubMenu(RMenu:Get(menuName, 'main'), "SAUVEGARDE", "Profils de personnage"))
+
+---@param menu table
+local function toggleMenu(menu)
+    if not menu then return end
+    RageUI.Visible(menu, not RageUI.Visible(menu))
+end
+
+RegisterCommand(toggleCommand, function()
+    toggleMenu(RMenu:Get(menuName, 'main'))
+end, false)
+
+RegisterKeyMapping(toggleCommand, 'Ouvrir le menu d\'apparence', 'keyboard', 'F3')
 
 ---@type table
 local parents = {
@@ -143,10 +156,6 @@ local function applyModel(model)
 end
 
 RageUI.CreateWhile(1.0, function()
-    if IsControlJustPressed(1, 51) then
-        RageUI.Visible(RMenu:Get(menuName, 'main'), not RageUI.Visible(RMenu:Get(menuName, 'main')))
-    end
-
     if RageUI.Visible(RMenu:Get(menuName, 'main')) then
         RageUI.DrawContent({ header = true, glare = true, instructionalButton = true }, function()
             RageUI.Separator("~b~Inspiré du créateur GTA Online")
