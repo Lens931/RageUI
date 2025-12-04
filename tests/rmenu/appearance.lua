@@ -71,18 +71,26 @@ local appearance = {
     eyebrows = 1,
     eyebrowsOpacity = 5,
     makeupStyle = 1,
+    makeupColor = 1,
     makeupOpacity = 5,
     lipstickStyle = 1,
+    lipstickColor = 1,
     lipstickOpacity = 5,
     blemishes = 0,
     ageing = 0,
 }
 
-local hairStyles = { "Cheveux courts", "Dégradé net", "Coiffé en arrière", "Bouclé", "Chignon", "Tresse", "Crâne rasé" }
-local hairColors = { "Noir", "Châtain", "Brun", "Blond", "Blanc", "Rouge", "Cuivre", "Auburn" }
-local eyebrows = { "Léger", "Droites", "Courbées", "Épaisses", "Affinées" }
-local makeups = { "Naturel", "Smokey", "Glamour", "Cat Eye", "Pop" }
-local lipsticks = { "Naturel", "Brillant", "Mat", "Rouge vif", "Rose" }
+local appearanceOptions = {
+    hairStyles = { labels = {}, values = {} },
+    hairColors = { labels = {}, values = {} },
+    eyebrows = { labels = {}, values = {} },
+    makeups = { labels = {}, values = {} },
+    makeupColors = { labels = {}, values = {} },
+    lipsticks = { labels = {}, values = {} },
+    lipstickColors = { labels = {}, values = {} },
+    blemishes = { labels = {}, values = {} },
+    ageing = { labels = {}, values = {} },
+}
 
 ---@type table
 local wardrobe = {
@@ -91,14 +99,24 @@ local wardrobe = {
     pants = 1,
     shoes = 1,
     jacket = 1,
+    mask = 1,
+    bag = 1,
+    accessory = 1,
+    decals = 1,
+    armor = 1,
 }
 
 local wardrobeOptions = {
-    tshirts = { "T-shirt basique", "Débardeur", "Col en V", "Longline" },
-    torsos = { "Torse par défaut", "Gilet simple", "Chemise ouverte" },
-    jackets = { "Blouson", "Veste en cuir", "Manteau long" },
-    pants = { "Jean slim", "Cargo", "Chino" },
-    shoes = { "Baskets", "Boots", "Derbies", "Skate" },
+    tshirts = { labels = {}, values = {} },
+    torsos = { labels = {}, values = {} },
+    jackets = { labels = {}, values = {} },
+    pants = { labels = {}, values = {} },
+    shoes = { labels = {}, values = {} },
+    masks = { labels = {}, values = {} },
+    bags = { labels = {}, values = {} },
+    accessories = { labels = {}, values = {} },
+    decals = { labels = {}, values = {} },
+    armors = { labels = {}, values = {} },
 }
 
 ---@type table
@@ -111,11 +129,11 @@ local props = {
 }
 
 local propOptions = {
-    hats = { "Casquette", "Bonnet", "Borsalino", "Chapeau trilby" },
-    glasses = { "Classiques", "Aviateur", "Carrées", "Sport" },
-    ears = { "Boucle simple", "Créole", "Stud", "Sans" },
-    watches = { "Analogique", "Numérique", "Sport" },
-    bracelets = { "Cuir", "Métal", "Perles", "Sans" },
+    hats = { labels = {}, values = {} },
+    glasses = { labels = {}, values = {} },
+    ears = { labels = {}, values = {} },
+    watches = { labels = {}, values = {} },
+    bracelets = { labels = {}, values = {} },
 }
 
 ---@type table
@@ -148,6 +166,175 @@ local function getPlayerPed()
     return PlayerPedId()
 end
 
+local function clampSelection(selection, max)
+    if max < 1 then return 1 end
+    if selection < 1 then return 1 end
+    if selection > max then return max end
+    return selection
+end
+
+local function buildComponentOptions(componentId, includeNone)
+    local ped = getPlayerPed()
+    local labels = {}
+    local values = {}
+
+    if includeNone then
+        table.insert(labels, "Aucun")
+        table.insert(values, 0)
+    end
+
+    local total = GetNumberOfPedDrawableVariations(ped, componentId)
+    for drawable = 0, total - 1 do
+        table.insert(labels, string.format("Variation %02d", drawable))
+        table.insert(values, drawable)
+    end
+
+    if #labels == 0 then
+        table.insert(labels, "Variation 00")
+        table.insert(values, 0)
+    end
+
+    return labels, values
+end
+
+local function buildHairColorOptions()
+    local labels = {}
+    local values = {}
+
+    local total = GetNumHairColors()
+    for colorIndex = 0, total - 1 do
+        table.insert(labels, string.format("Couleur %02d", colorIndex))
+        table.insert(values, colorIndex)
+    end
+
+    if #labels == 0 then
+        table.insert(labels, "Couleur 00")
+        table.insert(values, 0)
+    end
+
+    return labels, values
+end
+
+local function buildOverlayOptions(overlayId, includeNone)
+    local labels = {}
+    local values = {}
+
+    if includeNone then
+        table.insert(labels, "Aucun")
+        table.insert(values, -1)
+    end
+
+    local total = GetPedHeadOverlayNum(overlayId)
+    for overlayIndex = 0, total - 1 do
+        table.insert(labels, string.format("Variation %02d", overlayIndex))
+        table.insert(values, overlayIndex)
+    end
+
+    if #labels == 0 then
+        table.insert(labels, "Variation 00")
+        table.insert(values, 0)
+    end
+
+    return labels, values
+end
+
+local function buildMakeupColorOptions()
+    local labels = {}
+    local values = {}
+
+    local total = GetNumMakeupColors()
+    for colorIndex = 0, total - 1 do
+        table.insert(labels, string.format("Couleur %02d", colorIndex))
+        table.insert(values, colorIndex)
+    end
+
+    if #labels == 0 then
+        table.insert(labels, "Couleur 00")
+        table.insert(values, 0)
+    end
+
+    return labels, values
+end
+
+local function buildPropOptions(propId)
+    local ped = getPlayerPed()
+    local labels = { "Sans" }
+    local values = { -1 }
+
+    local total = GetNumberOfPedPropDrawableVariations(ped, propId)
+    for drawable = 0, total - 1 do
+        table.insert(labels, string.format("Variation %02d", drawable))
+        table.insert(values, drawable)
+    end
+
+    return labels, values
+end
+
+local function refreshWardrobeOptions()
+    wardrobeOptions.masks.labels, wardrobeOptions.masks.values = buildComponentOptions(1, true)
+    wardrobeOptions.tshirts.labels, wardrobeOptions.tshirts.values = buildComponentOptions(8, false)
+    wardrobeOptions.torsos.labels, wardrobeOptions.torsos.values = buildComponentOptions(11, false)
+    wardrobeOptions.jackets.labels, wardrobeOptions.jackets.values = buildComponentOptions(3, false)
+    wardrobeOptions.pants.labels, wardrobeOptions.pants.values = buildComponentOptions(4, false)
+    wardrobeOptions.shoes.labels, wardrobeOptions.shoes.values = buildComponentOptions(6, false)
+    wardrobeOptions.bags.labels, wardrobeOptions.bags.values = buildComponentOptions(5, true)
+    wardrobeOptions.accessories.labels, wardrobeOptions.accessories.values = buildComponentOptions(7, true)
+    wardrobeOptions.decals.labels, wardrobeOptions.decals.values = buildComponentOptions(10, true)
+    wardrobeOptions.armors.labels, wardrobeOptions.armors.values = buildComponentOptions(9, true)
+
+    wardrobe.mask = clampSelection(wardrobe.mask, #wardrobeOptions.masks.labels)
+    wardrobe.tshirt = clampSelection(wardrobe.tshirt, #wardrobeOptions.tshirts.labels)
+    wardrobe.torso = clampSelection(wardrobe.torso, #wardrobeOptions.torsos.labels)
+    wardrobe.jacket = clampSelection(wardrobe.jacket, #wardrobeOptions.jackets.labels)
+    wardrobe.pants = clampSelection(wardrobe.pants, #wardrobeOptions.pants.labels)
+    wardrobe.shoes = clampSelection(wardrobe.shoes, #wardrobeOptions.shoes.labels)
+    wardrobe.bag = clampSelection(wardrobe.bag, #wardrobeOptions.bags.labels)
+    wardrobe.accessory = clampSelection(wardrobe.accessory, #wardrobeOptions.accessories.labels)
+    wardrobe.decals = clampSelection(wardrobe.decals, #wardrobeOptions.decals.labels)
+    wardrobe.armor = clampSelection(wardrobe.armor, #wardrobeOptions.armors.labels)
+end
+
+local function refreshPropOptions()
+    propOptions.hats.labels, propOptions.hats.values = buildPropOptions(0)
+    propOptions.glasses.labels, propOptions.glasses.values = buildPropOptions(1)
+    propOptions.ears.labels, propOptions.ears.values = buildPropOptions(2)
+    propOptions.watches.labels, propOptions.watches.values = buildPropOptions(6)
+    propOptions.bracelets.labels, propOptions.bracelets.values = buildPropOptions(7)
+
+    props.hats = clampSelection(props.hats, #propOptions.hats.labels)
+    props.glasses = clampSelection(props.glasses, #propOptions.glasses.labels)
+    props.ears = clampSelection(props.ears, #propOptions.ears.labels)
+    props.watches = clampSelection(props.watches, #propOptions.watches.labels)
+    props.bracelets = clampSelection(props.bracelets, #propOptions.bracelets.labels)
+end
+
+local function refreshAppearanceOptions()
+    appearanceOptions.hairStyles.labels, appearanceOptions.hairStyles.values = buildComponentOptions(2, false)
+    appearanceOptions.hairColors.labels, appearanceOptions.hairColors.values = buildHairColorOptions()
+    appearanceOptions.eyebrows.labels, appearanceOptions.eyebrows.values = buildOverlayOptions(2, false)
+    appearanceOptions.makeups.labels, appearanceOptions.makeups.values = buildOverlayOptions(4, true)
+    appearanceOptions.makeupColors.labels, appearanceOptions.makeupColors.values = buildMakeupColorOptions()
+    appearanceOptions.lipsticks.labels, appearanceOptions.lipsticks.values = buildOverlayOptions(8, true)
+    appearanceOptions.lipstickColors.labels, appearanceOptions.lipstickColors.values = buildMakeupColorOptions()
+    appearanceOptions.blemishes.labels, appearanceOptions.blemishes.values = buildOverlayOptions(0, true)
+    appearanceOptions.ageing.labels, appearanceOptions.ageing.values = buildOverlayOptions(3, true)
+
+    appearance.hairStyle = clampSelection(appearance.hairStyle, #appearanceOptions.hairStyles.labels)
+    appearance.hairColor = clampSelection(appearance.hairColor, #appearanceOptions.hairColors.labels)
+    appearance.hairHighlight = clampSelection(appearance.hairHighlight, #appearanceOptions.hairColors.labels)
+    appearance.eyebrows = clampSelection(appearance.eyebrows, #appearanceOptions.eyebrows.labels)
+    appearance.makeupStyle = clampSelection(appearance.makeupStyle, #appearanceOptions.makeups.labels)
+    appearance.makeupColor = clampSelection(appearance.makeupColor, #appearanceOptions.makeupColors.labels)
+    appearance.lipstickStyle = clampSelection(appearance.lipstickStyle, #appearanceOptions.lipsticks.labels)
+    appearance.lipstickColor = clampSelection(appearance.lipstickColor, #appearanceOptions.lipstickColors.labels)
+    appearance.blemishes = clampSelection(appearance.blemishes, #appearanceOptions.blemishes.labels)
+    appearance.ageing = clampSelection(appearance.ageing, #appearanceOptions.ageing.labels)
+end
+
+refreshWardrobeOptions()
+refreshPropOptions()
+refreshAppearanceOptions()
+
 local function applyHeritage()
     local ped = getPlayerPed()
     local father = heritage.father - 1
@@ -178,41 +365,62 @@ end
 
 local function applyPedAppearance()
     local ped = getPlayerPed()
-    local hair = appearance.hairStyle - 1
-    SetPedComponentVariation(ped, 2, hair, 0, 0)
-    SetPedHairColor(ped, appearance.hairColor - 1, appearance.hairHighlight - 1)
+    local hairDrawable = appearanceOptions.hairStyles.values[appearance.hairStyle] or 0
+    local hairColor = appearanceOptions.hairColors.values[appearance.hairColor] or 0
+    local hairHighlight = appearanceOptions.hairColors.values[appearance.hairHighlight] or 0
+    SetPedComponentVariation(ped, 2, hairDrawable, 0, 0)
+    SetPedHairColor(ped, hairColor, hairHighlight)
 
-    SetPedHeadOverlay(ped, 2, appearance.eyebrows - 1, appearance.eyebrowsOpacity / 10.0)
-    SetPedHeadOverlayColor(ped, 2, 1, appearance.hairColor - 1, appearance.hairHighlight - 1)
+    local eyebrowIndex = appearanceOptions.eyebrows.values[appearance.eyebrows] or -1
+    SetPedHeadOverlay(ped, 2, eyebrowIndex, appearance.eyebrowsOpacity / 10.0)
+    SetPedHeadOverlayColor(ped, 2, 1, hairColor, hairHighlight)
 
-    SetPedHeadOverlay(ped, 4, appearance.makeupStyle - 1, appearance.makeupOpacity / 10.0)
-    SetPedHeadOverlayColor(ped, 4, 2, appearance.makeupStyle - 1, 0)
+    local makeupIndex = appearanceOptions.makeups.values[appearance.makeupStyle] or -1
+    local makeupColor = appearanceOptions.makeupColors.values[appearance.makeupColor] or 0
+    SetPedHeadOverlay(ped, 4, makeupIndex, appearance.makeupOpacity / 10.0)
+    SetPedHeadOverlayColor(ped, 4, 2, makeupColor, 0)
 
-    SetPedHeadOverlay(ped, 8, appearance.lipstickStyle - 1, appearance.lipstickOpacity / 10.0)
-    SetPedHeadOverlayColor(ped, 8, 2, appearance.lipstickStyle - 1, 0)
+    local lipstickIndex = appearanceOptions.lipsticks.values[appearance.lipstickStyle] or -1
+    local lipstickColor = appearanceOptions.lipstickColors.values[appearance.lipstickColor] or 0
+    SetPedHeadOverlay(ped, 8, lipstickIndex, appearance.lipstickOpacity / 10.0)
+    SetPedHeadOverlayColor(ped, 8, 2, lipstickColor, 0)
 
-    SetPedHeadOverlay(ped, 0, appearance.blemishes - 1, 1.0)
-    SetPedHeadOverlay(ped, 3, appearance.ageing - 1, 1.0)
+    local blemishIndex = appearanceOptions.blemishes.values[appearance.blemishes] or -1
+    SetPedHeadOverlay(ped, 0, blemishIndex, 1.0)
+
+    local ageingIndex = appearanceOptions.ageing.values[appearance.ageing] or -1
+    SetPedHeadOverlay(ped, 3, ageingIndex, 1.0)
 end
 
 local function applyWardrobe()
     local ped = getPlayerPed()
-    SetPedComponentVariation(ped, 8, wardrobe.tshirt - 1, 0, 0)
-    SetPedComponentVariation(ped, 11, wardrobe.torso - 1, 0, 0)
-    SetPedComponentVariation(ped, 3, wardrobe.jacket - 1, 0, 0)
-    SetPedComponentVariation(ped, 4, wardrobe.pants - 1, 0, 0)
-    SetPedComponentVariation(ped, 6, wardrobe.shoes - 1, 0, 0)
+
+    local function setComponent(componentId, index, options)
+        local drawable = options.values[index] or 0
+        SetPedComponentVariation(ped, componentId, drawable, 0, 0)
+    end
+
+    setComponent(1, wardrobe.mask, wardrobeOptions.masks)
+    setComponent(8, wardrobe.tshirt, wardrobeOptions.tshirts)
+    setComponent(11, wardrobe.torso, wardrobeOptions.torsos)
+    setComponent(3, wardrobe.jacket, wardrobeOptions.jackets)
+    setComponent(4, wardrobe.pants, wardrobeOptions.pants)
+    setComponent(6, wardrobe.shoes, wardrobeOptions.shoes)
+    setComponent(5, wardrobe.bag, wardrobeOptions.bags)
+    setComponent(7, wardrobe.accessory, wardrobeOptions.accessories)
+    setComponent(10, wardrobe.decals, wardrobeOptions.decals)
+    setComponent(9, wardrobe.armor, wardrobeOptions.armors)
 end
 
 local function applyProps()
     local ped = getPlayerPed()
 
     local function setProp(propId, index, options)
-        local selectedLabel = options[index]
-        if selectedLabel == "Sans" then
+        local drawable = options.values[index] or -1
+        if drawable == -1 then
             ClearPedProp(ped, propId)
         else
-            SetPedPropIndex(ped, propId, index - 1, 0, true)
+            SetPedPropIndex(ped, propId, drawable, 0, true)
         end
     end
 
@@ -232,6 +440,10 @@ local function applyModel(model)
     end
     SetPlayerModel(PlayerId(), hash)
     SetModelAsNoLongerNeeded(hash)
+
+    refreshWardrobeOptions()
+    refreshPropOptions()
+    refreshAppearanceOptions()
 
     -- Re-apply the customization after swapping ped models
     applyHeritage()
@@ -318,21 +530,21 @@ RageUI.CreateWhile(1.0, function()
     if RageUI.Visible(RMenu:Get(menuName, 'appearance')) then
         RageUI.DrawContent({ header = true, glare = true, instructionalButton = true }, function()
             RageUI.Separator("~b~Cheveux")
-            RageUI.List("Style", hairStyles, appearance.hairStyle, "Choisissez une coupe.", {}, true, function(_, _, _, Index)
+            RageUI.List("Style", appearanceOptions.hairStyles.labels, appearance.hairStyle, "Choisissez une coupe.", {}, true, function(_, _, _, Index)
                 appearance.hairStyle = Index
                 applyPedAppearance()
             end)
-            RageUI.List("Couleur", hairColors, appearance.hairColor, "Teinte principale.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur", appearanceOptions.hairColors.labels, appearance.hairColor, "Teinte principale.", {}, true, function(_, _, _, Index)
                 appearance.hairColor = Index
                 applyPedAppearance()
             end)
-            RageUI.List("Mèches", hairColors, appearance.hairHighlight, "Couleur secondaire.", {}, true, function(_, _, _, Index)
+            RageUI.List("Mèches", appearanceOptions.hairColors.labels, appearance.hairHighlight, "Couleur secondaire.", {}, true, function(_, _, _, Index)
                 appearance.hairHighlight = Index
                 applyPedAppearance()
             end)
 
             RageUI.Separator("~b~Sourcils")
-            RageUI.List("Forme", eyebrows, appearance.eyebrows, "Style de sourcil.", {}, true, function(_, _, _, Index)
+            RageUI.List("Forme", appearanceOptions.eyebrows.labels, appearance.eyebrows, "Style de sourcil.", {}, true, function(_, _, _, Index)
                 appearance.eyebrows = Index
                 applyPedAppearance()
             end)
@@ -342,7 +554,7 @@ RageUI.CreateWhile(1.0, function()
             end)
 
             RageUI.Separator("~b~Maquillage")
-            RageUI.List("Maquillage", makeups, appearance.makeupStyle, "Sélection du style.", {}, true, function(_, _, _, Index)
+            RageUI.List("Maquillage", appearanceOptions.makeups.labels, appearance.makeupStyle, "Sélection du style.", {}, true, function(_, _, _, Index)
                 appearance.makeupStyle = Index
                 applyPedAppearance()
             end)
@@ -350,8 +562,16 @@ RageUI.CreateWhile(1.0, function()
                 appearance.makeupOpacity = Index
                 applyPedAppearance()
             end)
-            RageUI.List("Rouge à lèvres", lipsticks, appearance.lipstickStyle, "Couleur des lèvres.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur maquillage", appearanceOptions.makeupColors.labels, appearance.makeupColor, "Choisissez la couleur.", {}, true, function(_, _, _, Index)
+                appearance.makeupColor = Index
+                applyPedAppearance()
+            end)
+            RageUI.List("Rouge à lèvres", appearanceOptions.lipsticks.labels, appearance.lipstickStyle, "Couleur des lèvres.", {}, true, function(_, _, _, Index)
                 appearance.lipstickStyle = Index
+                applyPedAppearance()
+            end)
+            RageUI.List("Couleur lèvres", appearanceOptions.lipstickColors.labels, appearance.lipstickColor, "Teinte du rouge à lèvres.", {}, true, function(_, _, _, Index)
+                appearance.lipstickColor = Index
                 applyPedAppearance()
             end)
             RageUI.Slider("Opacité lèvres", appearance.lipstickOpacity, 10, "Intensité du rouge à lèvres.", false, {}, true, function(_, _, _, Index)
@@ -374,24 +594,45 @@ RageUI.CreateWhile(1.0, function()
     if RageUI.Visible(RMenu:Get(menuName, 'wardrobe')) then
         RageUI.DrawContent({ header = true, glare = true, instructionalButton = true }, function()
             RageUI.Separator("~b~Tenue de base")
-            RageUI.List("T-shirt", wardrobeOptions.tshirts, wardrobe.tshirt, "Couche intérieure.", {}, true, function(_, _, _, Index)
+            RageUI.List("T-shirt", wardrobeOptions.tshirts.labels, wardrobe.tshirt, "Couche intérieure.", {}, true, function(_, _, _, Index)
                 wardrobe.tshirt = Index
                 applyWardrobe()
             end)
-            RageUI.List("Torse", wardrobeOptions.torsos, wardrobe.torso, "Couche principale.", {}, true, function(_, _, _, Index)
+            RageUI.List("Torse", wardrobeOptions.torsos.labels, wardrobe.torso, "Couche principale.", {}, true, function(_, _, _, Index)
                 wardrobe.torso = Index
                 applyWardrobe()
             end)
-            RageUI.List("Veste", wardrobeOptions.jackets, wardrobe.jacket, "Couche extérieure.", {}, true, function(_, _, _, Index)
+            RageUI.List("Veste", wardrobeOptions.jackets.labels, wardrobe.jacket, "Couche extérieure.", {}, true, function(_, _, _, Index)
                 wardrobe.jacket = Index
                 applyWardrobe()
             end)
-            RageUI.List("Pantalon", wardrobeOptions.pants, wardrobe.pants, "Bas du corps.", {}, true, function(_, _, _, Index)
+            RageUI.List("Pantalon", wardrobeOptions.pants.labels, wardrobe.pants, "Bas du corps.", {}, true, function(_, _, _, Index)
                 wardrobe.pants = Index
                 applyWardrobe()
             end)
-            RageUI.List("Chaussures", wardrobeOptions.shoes, wardrobe.shoes, "Choix de chaussures.", {}, true, function(_, _, _, Index)
+            RageUI.List("Chaussures", wardrobeOptions.shoes.labels, wardrobe.shoes, "Choix de chaussures.", {}, true, function(_, _, _, Index)
                 wardrobe.shoes = Index
+                applyWardrobe()
+            end)
+            RageUI.Separator("~b~Add-ons")
+            RageUI.List("Masque", wardrobeOptions.masks.labels, wardrobe.mask, "Tous les masques disponibles.", {}, true, function(_, _, _, Index)
+                wardrobe.mask = Index
+                applyWardrobe()
+            end)
+            RageUI.List("Sac / Parachute", wardrobeOptions.bags.labels, wardrobe.bag, "Sacs, sacoches ou parachute.", {}, true, function(_, _, _, Index)
+                wardrobe.bag = Index
+                applyWardrobe()
+            end)
+            RageUI.List("Accessoire cou", wardrobeOptions.accessories.labels, wardrobe.accessory, "Cravates, colliers et foulards.", {}, true, function(_, _, _, Index)
+                wardrobe.accessory = Index
+                applyWardrobe()
+            end)
+            RageUI.List("Patchs / Décals", wardrobeOptions.decals.labels, wardrobe.decals, "Badges et patchs visibles.", {}, true, function(_, _, _, Index)
+                wardrobe.decals = Index
+                applyWardrobe()
+            end)
+            RageUI.List("Gilet pare-balles", wardrobeOptions.armors.labels, wardrobe.armor, "Niveaux de protection.", {}, true, function(_, _, _, Index)
+                wardrobe.armor = Index
                 applyWardrobe()
             end)
         end)
@@ -400,23 +641,23 @@ RageUI.CreateWhile(1.0, function()
     if RageUI.Visible(RMenu:Get(menuName, 'props')) then
         RageUI.DrawContent({ header = true, glare = true, instructionalButton = true }, function()
             RageUI.Separator("~b~Accessoires")
-            RageUI.List("Chapeaux", propOptions.hats, props.hats, "Ajoutez un couvre-chef.", {}, true, function(_, _, _, Index)
+            RageUI.List("Chapeaux", propOptions.hats.labels, props.hats, "Ajoutez un couvre-chef.", {}, true, function(_, _, _, Index)
                 props.hats = Index
                 applyProps()
             end)
-            RageUI.List("Lunettes", propOptions.glasses, props.glasses, "Lunettes et montures.", {}, true, function(_, _, _, Index)
+            RageUI.List("Lunettes", propOptions.glasses.labels, props.glasses, "Lunettes et montures.", {}, true, function(_, _, _, Index)
                 props.glasses = Index
                 applyProps()
             end)
-            RageUI.List("Oreilles", propOptions.ears, props.ears, "Boucles ou studs.", {}, true, function(_, _, _, Index)
+            RageUI.List("Oreilles", propOptions.ears.labels, props.ears, "Boucles ou studs.", {}, true, function(_, _, _, Index)
                 props.ears = Index
                 applyProps()
             end)
-            RageUI.List("Montres", propOptions.watches, props.watches, "Choisissez un poignet.", {}, true, function(_, _, _, Index)
+            RageUI.List("Montres", propOptions.watches.labels, props.watches, "Choisissez un poignet.", {}, true, function(_, _, _, Index)
                 props.watches = Index
                 applyProps()
             end)
-            RageUI.List("Bracelets", propOptions.bracelets, props.bracelets, "Accessoire de poignet.", {}, true, function(_, _, _, Index)
+            RageUI.List("Bracelets", propOptions.bracelets.labels, props.bracelets, "Accessoire de poignet.", {}, true, function(_, _, _, Index)
                 props.bracelets = Index
                 applyProps()
             end)
