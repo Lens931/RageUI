@@ -37,10 +37,10 @@ client_scripts {
 
 
 client_scripts {
-    'tests/rmenu/basic.lua',
+    'tests/rmenu/appearance.lua',
 }
 ]]
 
 client_scripts {
-    'tests/rmenu/basic.lua',
+    'tests/rmenu/appearance.lua',
 }
