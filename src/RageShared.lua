@@ -2644,17 +2644,19 @@ function RageUI.SliderProgress(Label, ProgressStart, ProgressMax, Description, S
 
                 -- (((SettingsSlider.Slider.Width) / (#Items - 1)) * (ProgressStart - 1))
 
-                if (type(Style.ProgressBackgroundColor) == "table") then
-                    RenderRectangle(CurrentMenu.X + SettingsSlider.Background.X + CurrentMenu.WidthOffset - RightOffset, CurrentMenu.Y + SettingsSlider.Background.Y + CurrentMenu.SubtitleHeight + RageUI.ItemOffset, SettingsSlider.Background.Width, SettingsSlider.Background.Height, Style.ProgressBackgroundColor.R, Style.ProgressBackgroundColor.G, Style.ProgressBackgroundColor.B, Style.ProgressBackgroundColor.A)
-                else
-                    error("Style ProgressBackgroundColor is not a table or undefined")
+                local progressBackgroundColor = Style.ProgressBackgroundColor
+                if (type(progressBackgroundColor) ~= "table") then
+                    progressBackgroundColor = { R = 4, G = 32, B = 57, A = 255 }
                 end
 
-                if (type(Style.ProgressColor) == "table") then
-                    RenderRectangle(CurrentMenu.X + SettingsSlider.Slider.X + CurrentMenu.WidthOffset - RightOffset, CurrentMenu.Y + SettingsSlider.Slider.Y + CurrentMenu.SubtitleHeight + RageUI.ItemOffset, (((SettingsSlider.Slider.Width) / (#Items - 1)) * (ProgressStart - 1)), SettingsSlider.Slider.Height, Style.ProgressColor.R, Style.ProgressColor.G, Style.ProgressColor.B, Style.ProgressColor.A)
-                else
-                    error("Style ProgressColor is not a table or undefined")
+                RenderRectangle(CurrentMenu.X + SettingsSlider.Background.X + CurrentMenu.WidthOffset - RightOffset, CurrentMenu.Y + SettingsSlider.Background.Y + CurrentMenu.SubtitleHeight + RageUI.ItemOffset, SettingsSlider.Background.Width, SettingsSlider.Background.Height, progressBackgroundColor.R, progressBackgroundColor.G, progressBackgroundColor.B, progressBackgroundColor.A)
+
+                local progressColor = Style.ProgressColor
+                if (type(progressColor) ~= "table") then
+                    progressColor = { R = 57, G = 116, B = 200, A = 255 }
                 end
+
+                RenderRectangle(CurrentMenu.X + SettingsSlider.Slider.X + CurrentMenu.WidthOffset - RightOffset, CurrentMenu.Y + SettingsSlider.Slider.Y + CurrentMenu.SubtitleHeight + RageUI.ItemOffset, (((SettingsSlider.Slider.Width) / (#Items - 1)) * (ProgressStart - 1)), SettingsSlider.Slider.Height, progressColor.R, progressColor.G, progressColor.B, progressColor.A)
 
                 RageUI.ItemOffset = RageUI.ItemOffset + SettingsButton.Rectangle.Height
 
