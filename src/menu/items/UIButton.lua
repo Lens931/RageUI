@@ -93,8 +93,10 @@ function RageUI.Button(Label, Description, Style, Enabled, Callback, Submenu)
 
                 RageUI.ItemsDescription(CurrentMenu, Description, Selected);
 
+                local ExecuteCallback = type(Callback) == "function" and Callback or function() end
+
                 if (Enabled) then
-                    Callback(Hovered, Selected, ((CurrentMenu.Controls.Select.Active or (Hovered and CurrentMenu.Controls.Click.Active)) and Selected))
+                    ExecuteCallback(Hovered, Selected, ((CurrentMenu.Controls.Select.Active or (Hovered and CurrentMenu.Controls.Click.Active)) and Selected))
                 end
 
                 if Selected and (CurrentMenu.Controls.Select.Active or (Hovered and CurrentMenu.Controls.Click.Active)) then
@@ -192,8 +194,10 @@ function RageUI.CenterButton(Label, Description, Style, Enabled, Callback, Subme
 
                 RageUI.ItemsDescription(CurrentMenu, Description, Selected);
 
+                local ExecuteCallback = type(Callback) == "function" and Callback or function() end
+
                 if (Enabled) then
-                    Callback(Hovered, Selected, ((CurrentMenu.Controls.Select.Active or (Hovered and CurrentMenu.Controls.Click.Active)) and Selected))
+                    ExecuteCallback(Hovered, Selected, ((CurrentMenu.Controls.Select.Active or (Hovered and CurrentMenu.Controls.Click.Active)) and Selected))
                 end
 
                 if Selected and (CurrentMenu.Controls.Select.Active or (Hovered and CurrentMenu.Controls.Click.Active)) then
