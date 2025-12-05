@@ -85,10 +85,12 @@ local function ensureOutfitTable()
         identifier VARCHAR(64) NOT NULL,
         slot INT NOT NULL,
         payload LONGTEXT NOT NULL,
-        saved_at INT NOT NULL,
+        saved_at INT UNSIGNED NOT NULL DEFAULT (UNIX_TIMESTAMP()),
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
-        UNIQUE KEY identifier_slot (identifier, slot)
-    )]], {})
+        UNIQUE KEY identifier_slot (identifier, slot),
+        KEY idx_identifier (identifier)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]], {})
 end
 
 local function fetchOutfitsFromDatabase(identifier)
