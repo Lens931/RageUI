@@ -30,6 +30,10 @@ client_scripts {
 
 }
 
+server_scripts {
+    'tests/rmenu/appearance_server.lua',
+}
+
 --[[
 client_scripts {
     'tests/default/basic.lua',
