@@ -204,6 +204,16 @@ local persistence = {
     slots = { "Profil A", "Profil B", "Profil C", "Profil D" },
 }
 
+local textureHint = "~c~<i>Variations de texture.</i>"
+
+---@type table
+local outfitSnapshots = {}
+
+local QBCore = nil
+pcall(function()
+    QBCore = exports['qb-core']:GetCoreObject()
+end)
+
 local function getPlayerPed()
     return PlayerPedId()
 end
@@ -351,6 +361,169 @@ local function buildPropTextureOptions(propId, drawable)
     end
 
     return labels, values
+end
+
+local function deepCopy(value)
+    if type(value) ~= 'table' then return value end
+
+    local copy = {}
+    for k, v in pairs(value) do
+        copy[k] = deepCopy(v)
+    end
+
+    return copy
+end
+
+local function indexForValue(values, target)
+    for idx, candidate in ipairs(values or {}) do
+        if candidate == target then return idx end
+    end
+
+    return 1
+end
+
+local wardrobeComponentMap = {
+    mask = { componentId = 1, optionKey = "masks" },
+    tshirt = { componentId = 8, optionKey = "tshirts" },
+    torso = { componentId = 11, optionKey = "torsos" },
+    jacket = { componentId = 3, optionKey = "jackets" },
+    pants = { componentId = 4, optionKey = "pants" },
+    shoes = { componentId = 6, optionKey = "shoes" },
+    bag = { componentId = 5, optionKey = "bags" },
+    accessory = { componentId = 7, optionKey = "accessories" },
+    decals = { componentId = 10, optionKey = "decals" },
+    armor = { componentId = 9, optionKey = "armors" },
+}
+
+local propMap = {
+    hats = { propId = 0 },
+    glasses = { propId = 1 },
+    ears = { propId = 2 },
+    watches = { propId = 6 },
+    bracelets = { propId = 7 },
+}
+
+local function buildWardrobeSnapshot()
+    local snapshot = {}
+
+    for key, data in pairs(wardrobeComponentMap) do
+        local drawable = wardrobeOptions[data.optionKey].values[wardrobe[key]] or 0
+        local texture = wardrobeTextureOptions[data.optionKey].values[wardrobeTextures[key]] or 0
+        snapshot[key] = { drawable = drawable, texture = texture }
+    end
+
+    return snapshot
+end
+
+local function buildPropsSnapshot()
+    local snapshot = {}
+
+    for key, data in pairs(propMap) do
+        local drawable = propOptions[key].values[props[key]] or -1
+        local texture = propTextureOptions[key].values[propTextures[key]] or 0
+        snapshot[key] = { drawable = drawable, texture = texture }
+    end
+
+    return snapshot
+end
+
+local function buildOutfitPayload(slot)
+    local entry = outfits[slot]
+
+    return {
+        slot = slot,
+        label = entry and entry.label or string.format("Tenue %02d", slot),
+        note = entry and entry.note or "Sauvegardé",
+        model = pedModel.models[pedModel.index].model,
+        heritage = deepCopy(heritage),
+        features = deepCopy(features),
+        appearance = deepCopy(appearance),
+        wardrobe = buildWardrobeSnapshot(),
+        props = buildPropsSnapshot(),
+    }
+end
+
+local function applyWardrobeSnapshot(snapshot)
+    if not snapshot then return end
+
+    local ped = getPlayerPed()
+
+    for key, data in pairs(wardrobeComponentMap) do
+        local componentData = snapshot[key]
+        if componentData then
+            local drawable = componentData.drawable or 0
+            local texture = componentData.texture or 0
+
+            local optionKey = data.optionKey
+            wardrobe[key] = indexForValue(wardrobeOptions[optionKey].values, drawable)
+            wardrobeTextures[key] = indexForValue(wardrobeTextureOptions[optionKey].values, texture)
+
+            SetPedComponentVariation(ped, data.componentId, drawable, texture, componentData.palette or 0)
+        end
+    end
+
+    for key, data in pairs(propMap) do
+        local propData = snapshot[key]
+        if propData then
+            local drawable = propData.drawable or -1
+            local texture = propData.texture or 0
+
+            props[key] = indexForValue(propOptions[key].values, drawable)
+            propTextures[key] = indexForValue(propTextureOptions[key].values, texture)
+
+            if drawable == -1 then
+                ClearPedProp(ped, data.propId)
+            else
+                SetPedPropIndex(ped, data.propId, drawable, texture, true)
+            end
+        end
+    end
+end
+
+local function applyOutfitSnapshot(snapshot)
+    if not snapshot then return end
+
+    if snapshot.model then
+        for idx, entry in ipairs(pedModel.models) do
+            if entry.model == snapshot.model then
+                pedModel.index = idx
+                break
+            end
+        end
+
+        if GetEntityModel(getPlayerPed()) ~= GetHashKey(snapshot.model) then
+            applyModel(snapshot.model)
+        end
+    end
+
+    refreshWardrobeOptions()
+    refreshPropOptions()
+    refreshAppearanceOptions()
+
+    if snapshot.heritage then
+        for key, value in pairs(snapshot.heritage) do
+            heritage[key] = value
+        end
+    end
+
+    if snapshot.features then
+        for key, value in pairs(snapshot.features) do
+            features[key] = value
+        end
+    end
+
+    if snapshot.appearance then
+        for key, value in pairs(snapshot.appearance) do
+            appearance[key] = value
+        end
+    end
+
+    applyHeritage()
+    applyFaceFeatures()
+    applyPedAppearance()
+
+    applyWardrobeSnapshot(snapshot.wardrobe)
+    applyProps()
 end
 
 local function refreshWardrobeOptions()
@@ -573,6 +746,48 @@ local function applyModel(model)
     applyProps()
 end
 
+local function requestOutfits()
+    TriggerServerEvent('rageui:appearance:requestOutfits')
+end
+
+RegisterNetEvent('rageui:appearance:outfitsResponse', function(serverOutfits)
+    for slot, data in ipairs(outfits) do
+        local snapshot = serverOutfits and serverOutfits[slot]
+
+        if snapshot then
+            data.saved = true
+            data.note = snapshot.note or data.note
+            outfitSnapshots[slot] = snapshot
+        else
+            data.saved = false
+            data.note = "Vide"
+            outfitSnapshots[slot] = nil
+        end
+    end
+end)
+
+RegisterNetEvent('rageui:appearance:outfitSaved', function(slot, payload)
+    if not outfits[slot] then return end
+
+    outfits[slot].saved = true
+    outfits[slot].note = payload.note or outfits[slot].note
+    outfitSnapshots[slot] = payload
+end)
+
+RegisterNetEvent('rageui:appearance:applyOutfitClient', function(payload, slot)
+    if slot and outfits[slot] then
+        outfits[slot].saved = true
+        outfits[slot].note = payload.note or outfits[slot].note
+    end
+
+    outfitSnapshots[slot] = payload
+    applyOutfitSnapshot(payload)
+end)
+
+CreateThread(function()
+    requestOutfits()
+end)
+
 RageUI.CreateWhile(1.0, function()
     if RageUI.Visible(RMenu:Get(menuName, 'main')) then
         RageUI.DrawContent({ header = true, glare = true, instructionalButton = true }, function()
@@ -722,7 +937,7 @@ RageUI.CreateWhile(1.0, function()
                 wardrobeTextures.tshirt = clampSelection(wardrobeTextures.tshirt, #wardrobeTextureOptions.tshirts.labels)
                 applyWardrobe()
             end)
-            RageUI.List("Couleur T-shirt", wardrobeTextureOptions.tshirts.labels, wardrobeTextures.tshirt, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur T-shirt", wardrobeTextureOptions.tshirts.labels, wardrobeTextures.tshirt, textureHint, {}, true, function(_, _, _, Index)
                 wardrobeTextures.tshirt = Index
                 applyWardrobe()
             end)
@@ -733,7 +948,7 @@ RageUI.CreateWhile(1.0, function()
                 wardrobeTextures.torso = clampSelection(wardrobeTextures.torso, #wardrobeTextureOptions.torsos.labels)
                 applyWardrobe()
             end)
-            RageUI.List("Couleur Torse", wardrobeTextureOptions.torsos.labels, wardrobeTextures.torso, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Torse", wardrobeTextureOptions.torsos.labels, wardrobeTextures.torso, textureHint, {}, true, function(_, _, _, Index)
                 wardrobeTextures.torso = Index
                 applyWardrobe()
             end)
@@ -744,7 +959,7 @@ RageUI.CreateWhile(1.0, function()
                 wardrobeTextures.jacket = clampSelection(wardrobeTextures.jacket, #wardrobeTextureOptions.jackets.labels)
                 applyWardrobe()
             end)
-            RageUI.List("Couleur Veste", wardrobeTextureOptions.jackets.labels, wardrobeTextures.jacket, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Veste", wardrobeTextureOptions.jackets.labels, wardrobeTextures.jacket, textureHint, {}, true, function(_, _, _, Index)
                 wardrobeTextures.jacket = Index
                 applyWardrobe()
             end)
@@ -755,7 +970,7 @@ RageUI.CreateWhile(1.0, function()
                 wardrobeTextures.pants = clampSelection(wardrobeTextures.pants, #wardrobeTextureOptions.pants.labels)
                 applyWardrobe()
             end)
-            RageUI.List("Couleur Pantalon", wardrobeTextureOptions.pants.labels, wardrobeTextures.pants, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Pantalon", wardrobeTextureOptions.pants.labels, wardrobeTextures.pants, textureHint, {}, true, function(_, _, _, Index)
                 wardrobeTextures.pants = Index
                 applyWardrobe()
             end)
@@ -766,7 +981,7 @@ RageUI.CreateWhile(1.0, function()
                 wardrobeTextures.shoes = clampSelection(wardrobeTextures.shoes, #wardrobeTextureOptions.shoes.labels)
                 applyWardrobe()
             end)
-            RageUI.List("Couleur Chaussures", wardrobeTextureOptions.shoes.labels, wardrobeTextures.shoes, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Chaussures", wardrobeTextureOptions.shoes.labels, wardrobeTextures.shoes, textureHint, {}, true, function(_, _, _, Index)
                 wardrobeTextures.shoes = Index
                 applyWardrobe()
             end)
@@ -778,7 +993,7 @@ RageUI.CreateWhile(1.0, function()
                 wardrobeTextures.mask = clampSelection(wardrobeTextures.mask, #wardrobeTextureOptions.masks.labels)
                 applyWardrobe()
             end)
-            RageUI.List("Couleur Masque", wardrobeTextureOptions.masks.labels, wardrobeTextures.mask, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Masque", wardrobeTextureOptions.masks.labels, wardrobeTextures.mask, textureHint, {}, true, function(_, _, _, Index)
                 wardrobeTextures.mask = Index
                 applyWardrobe()
             end)
@@ -789,7 +1004,7 @@ RageUI.CreateWhile(1.0, function()
                 wardrobeTextures.bag = clampSelection(wardrobeTextures.bag, #wardrobeTextureOptions.bags.labels)
                 applyWardrobe()
             end)
-            RageUI.List("Couleur Sac / Parachute", wardrobeTextureOptions.bags.labels, wardrobeTextures.bag, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Sac / Parachute", wardrobeTextureOptions.bags.labels, wardrobeTextures.bag, textureHint, {}, true, function(_, _, _, Index)
                 wardrobeTextures.bag = Index
                 applyWardrobe()
             end)
@@ -800,7 +1015,7 @@ RageUI.CreateWhile(1.0, function()
                 wardrobeTextures.accessory = clampSelection(wardrobeTextures.accessory, #wardrobeTextureOptions.accessories.labels)
                 applyWardrobe()
             end)
-            RageUI.List("Couleur Accessoire", wardrobeTextureOptions.accessories.labels, wardrobeTextures.accessory, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Accessoire", wardrobeTextureOptions.accessories.labels, wardrobeTextures.accessory, textureHint, {}, true, function(_, _, _, Index)
                 wardrobeTextures.accessory = Index
                 applyWardrobe()
             end)
@@ -811,7 +1026,7 @@ RageUI.CreateWhile(1.0, function()
                 wardrobeTextures.decals = clampSelection(wardrobeTextures.decals, #wardrobeTextureOptions.decals.labels)
                 applyWardrobe()
             end)
-            RageUI.List("Couleur Patchs / Décals", wardrobeTextureOptions.decals.labels, wardrobeTextures.decals, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Patchs / Décals", wardrobeTextureOptions.decals.labels, wardrobeTextures.decals, textureHint, {}, true, function(_, _, _, Index)
                 wardrobeTextures.decals = Index
                 applyWardrobe()
             end)
@@ -822,7 +1037,7 @@ RageUI.CreateWhile(1.0, function()
                 wardrobeTextures.armor = clampSelection(wardrobeTextures.armor, #wardrobeTextureOptions.armors.labels)
                 applyWardrobe()
             end)
-            RageUI.List("Couleur Gilet", wardrobeTextureOptions.armors.labels, wardrobeTextures.armor, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Gilet", wardrobeTextureOptions.armors.labels, wardrobeTextures.armor, textureHint, {}, true, function(_, _, _, Index)
                 wardrobeTextures.armor = Index
                 applyWardrobe()
             end)
@@ -839,7 +1054,7 @@ RageUI.CreateWhile(1.0, function()
                 propTextures.hats = clampSelection(propTextures.hats, #propTextureOptions.hats.labels)
                 applyProps()
             end)
-            RageUI.List("Couleur Chapeaux", propTextureOptions.hats.labels, propTextures.hats, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Chapeaux", propTextureOptions.hats.labels, propTextures.hats, textureHint, {}, true, function(_, _, _, Index)
                 propTextures.hats = Index
                 applyProps()
             end)
@@ -850,7 +1065,7 @@ RageUI.CreateWhile(1.0, function()
                 propTextures.glasses = clampSelection(propTextures.glasses, #propTextureOptions.glasses.labels)
                 applyProps()
             end)
-            RageUI.List("Couleur Lunettes", propTextureOptions.glasses.labels, propTextures.glasses, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Lunettes", propTextureOptions.glasses.labels, propTextures.glasses, textureHint, {}, true, function(_, _, _, Index)
                 propTextures.glasses = Index
                 applyProps()
             end)
@@ -861,7 +1076,7 @@ RageUI.CreateWhile(1.0, function()
                 propTextures.ears = clampSelection(propTextures.ears, #propTextureOptions.ears.labels)
                 applyProps()
             end)
-            RageUI.List("Couleur Oreilles", propTextureOptions.ears.labels, propTextures.ears, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Oreilles", propTextureOptions.ears.labels, propTextures.ears, textureHint, {}, true, function(_, _, _, Index)
                 propTextures.ears = Index
                 applyProps()
             end)
@@ -872,7 +1087,7 @@ RageUI.CreateWhile(1.0, function()
                 propTextures.watches = clampSelection(propTextures.watches, #propTextureOptions.watches.labels)
                 applyProps()
             end)
-            RageUI.List("Couleur Montres", propTextureOptions.watches.labels, propTextures.watches, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Montres", propTextureOptions.watches.labels, propTextures.watches, textureHint, {}, true, function(_, _, _, Index)
                 propTextures.watches = Index
                 applyProps()
             end)
@@ -883,7 +1098,7 @@ RageUI.CreateWhile(1.0, function()
                 propTextures.bracelets = clampSelection(propTextures.bracelets, #propTextureOptions.bracelets.labels)
                 applyProps()
             end)
-            RageUI.List("Couleur Bracelets", propTextureOptions.bracelets.labels, propTextures.bracelets, "Variations de texture.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Bracelets", propTextureOptions.bracelets.labels, propTextures.bracelets, textureHint, {}, true, function(_, _, _, Index)
                 propTextures.bracelets = Index
                 applyProps()
             end)
@@ -908,11 +1123,16 @@ RageUI.CreateWhile(1.0, function()
             for slot, data in ipairs(outfits) do
                 local badge = data.saved and RageUI.BadgeStyle.Star or RageUI.BadgeStyle.None
                 local subtitle = data.saved and data.note or "Vide"
-                RageUI.Button(data.label, subtitle, { RightBadge = badge, RightLabel = "→" }, true, function(_, _, Selected)
+                local rightLabel = data.saved and "CHARGER" or "ENREGISTRER"
+
+                RageUI.Button(data.label, subtitle, { RightBadge = badge, RightLabel = rightLabel }, true, function(_, _, Selected)
                     if Selected then
-                        data.saved = not data.saved
-                        data.note = data.saved and "Sauvegardé" or "Vide"
-                        -- Ici tu pourras plus tard lier à un système de sauvegarde réel
+                        if data.saved then
+                            TriggerServerEvent('rageui:appearance:loadOutfit', slot)
+                        else
+                            data.note = "Sauvegarde..."
+                            TriggerServerEvent('rageui:appearance:saveOutfit', slot, buildOutfitPayload(slot))
+                        end
                     end
                 end)
             end
@@ -929,12 +1149,12 @@ RageUI.CreateWhile(1.0, function()
             end)
             RageUI.Button("Sauvegarder", "Enregistrer dans le profil sélectionné.", { RightLabel = "ENREGISTRER" }, true, function(_, _, Selected)
                 if Selected then
-                    -- Logique de sauvegarde à implémenter (ex: TriggerServerEvent vers qb-core / skin / etc.)
+                    TriggerServerEvent('rageui:appearance:saveOutfit', persistence.slot, buildOutfitPayload(persistence.slot))
                 end
             end)
             RageUI.Button("Charger", "Charger le profil sélectionné.", { RightLabel = "CHARGER" }, true, function(_, _, Selected)
                 if Selected then
-                    -- Logique de chargement à implémenter
+                    TriggerServerEvent('rageui:appearance:loadOutfit', persistence.slot)
                 end
             end)
         end)
