@@ -71,18 +71,26 @@ local appearance = {
     eyebrows = 1,
     eyebrowsOpacity = 5,
     makeupStyle = 1,
+    makeupColor = 1,
     makeupOpacity = 5,
     lipstickStyle = 1,
+    lipstickColor = 1,
     lipstickOpacity = 5,
     blemishes = 0,
     ageing = 0,
 }
 
-local hairStyles = { "Cheveux courts", "Dégradé net", "Coiffé en arrière", "Bouclé", "Chignon", "Tresse", "Crâne rasé" }
-local hairColors = { "Noir", "Châtain", "Brun", "Blond", "Blanc", "Rouge", "Cuivre", "Auburn" }
-local eyebrows = { "Léger", "Droites", "Courbées", "Épaisses", "Affinées" }
-local makeups = { "Naturel", "Smokey", "Glamour", "Cat Eye", "Pop" }
-local lipsticks = { "Naturel", "Brillant", "Mat", "Rouge vif", "Rose" }
+local appearanceOptions = {
+    hairStyles = { labels = {}, values = {} },
+    hairColors = { labels = {}, values = {} },
+    eyebrows = { labels = {}, values = {} },
+    makeups = { labels = {}, values = {} },
+    makeupColors = { labels = {}, values = {} },
+    lipsticks = { labels = {}, values = {} },
+    lipstickColors = { labels = {}, values = {} },
+    blemishes = { labels = {}, values = {} },
+    ageing = { labels = {}, values = {} },
+}
 
 ---@type table
 local wardrobe = {
@@ -189,6 +197,68 @@ local function buildComponentOptions(componentId, includeNone)
     return labels, values
 end
 
+-- Options couleurs de cheveux
+local function buildHairColorOptions()
+    local labels = {}
+    local values = {}
+
+    local total = GetNumHairColors()
+    for colorIndex = 0, total - 1 do
+        table.insert(labels, string.format("Couleur %02d", colorIndex))
+        table.insert(values, colorIndex)
+    end
+
+    if #labels == 0 then
+        table.insert(labels, "Couleur 00")
+        table.insert(values, 0)
+    end
+
+    return labels, values
+end
+
+-- Options overlays (sourcils, maquillage, etc.)
+local function buildOverlayOptions(overlayId, includeNone)
+    local labels = {}
+    local values = {}
+
+    if includeNone then
+        table.insert(labels, "Aucun")
+        table.insert(values, -1)
+    end
+
+    local total = GetPedHeadOverlayNum(overlayId)
+    for overlayIndex = 0, total - 1 do
+        table.insert(labels, string.format("Variation %02d", overlayIndex))
+        table.insert(values, overlayIndex)
+    end
+
+    if #labels == 0 then
+        table.insert(labels, "Variation 00")
+        table.insert(values, 0)
+    end
+
+    return labels, values
+end
+
+-- Options couleurs de maquillage
+local function buildMakeupColorOptions()
+    local labels = {}
+    local values = {}
+
+    local total = GetNumMakeupColors()
+    for colorIndex = 0, total - 1 do
+        table.insert(labels, string.format("Couleur %02d", colorIndex))
+        table.insert(values, colorIndex)
+    end
+
+    if #labels == 0 then
+        table.insert(labels, "Couleur 00")
+        table.insert(values, 0)
+    end
+
+    return labels, values
+end
+
 local function buildPropOptions(propId)
     local ped = getPlayerPed()
     local labels = { "Sans" }
@@ -241,8 +311,33 @@ local function refreshPropOptions()
     props.bracelets = clampSelection(props.bracelets, #propOptions.bracelets.labels)
 end
 
+local function refreshAppearanceOptions()
+    appearanceOptions.hairStyles.labels, appearanceOptions.hairStyles.values = buildComponentOptions(2, false)
+    appearanceOptions.hairColors.labels, appearanceOptions.hairColors.values = buildHairColorOptions()
+    appearanceOptions.eyebrows.labels, appearanceOptions.eyebrows.values = buildOverlayOptions(2, false)
+    appearanceOptions.makeups.labels, appearanceOptions.makeups.values = buildOverlayOptions(4, true)
+    appearanceOptions.makeupColors.labels, appearanceOptions.makeupColors.values = buildMakeupColorOptions()
+    appearanceOptions.lipsticks.labels, appearanceOptions.lipsticks.values = buildOverlayOptions(8, true)
+    appearanceOptions.lipstickColors.labels, appearanceOptions.lipstickColors.values = buildMakeupColorOptions()
+    appearanceOptions.blemishes.labels, appearanceOptions.blemishes.values = buildOverlayOptions(0, true)
+    appearanceOptions.ageing.labels, appearanceOptions.ageing.values = buildOverlayOptions(3, true)
+
+    appearance.hairStyle = clampSelection(appearance.hairStyle, #appearanceOptions.hairStyles.labels)
+    appearance.hairColor = clampSelection(appearance.hairColor, #appearanceOptions.hairColors.labels)
+    appearance.hairHighlight = clampSelection(appearance.hairHighlight, #appearanceOptions.hairColors.labels)
+    appearance.eyebrows = clampSelection(appearance.eyebrows, #appearanceOptions.eyebrows.labels)
+    appearance.makeupStyle = clampSelection(appearance.makeupStyle, #appearanceOptions.makeups.labels)
+    appearance.makeupColor = clampSelection(appearance.makeupColor, #appearanceOptions.makeupColors.labels)
+    appearance.lipstickStyle = clampSelection(appearance.lipstickStyle, #appearanceOptions.lipsticks.labels)
+    appearance.lipstickColor = clampSelection(appearance.lipstickColor, #appearanceOptions.lipstickColors.labels)
+    appearance.blemishes = clampSelection(appearance.blemishes, #appearanceOptions.blemishes.labels)
+    appearance.ageing = clampSelection(appearance.ageing, #appearanceOptions.ageing.labels)
+end
+
+-- Chargement des options au démarrage
 refreshWardrobeOptions()
 refreshPropOptions()
+refreshAppearanceOptions()
 
 local function applyHeritage()
     local ped = getPlayerPed()
@@ -274,21 +369,31 @@ end
 
 local function applyPedAppearance()
     local ped = getPlayerPed()
-    local hair = appearance.hairStyle - 1
-    SetPedComponentVariation(ped, 2, hair, 0, 0)
-    SetPedHairColor(ped, appearance.hairColor - 1, appearance.hairHighlight - 1)
+    local hairDrawable = appearanceOptions.hairStyles.values[appearance.hairStyle] or 0
+    local hairColor = appearanceOptions.hairColors.values[appearance.hairColor] or 0
+    local hairHighlight = appearanceOptions.hairColors.values[appearance.hairHighlight] or 0
+    SetPedComponentVariation(ped, 2, hairDrawable, 0, 0)
+    SetPedHairColor(ped, hairColor, hairHighlight)
 
-    SetPedHeadOverlay(ped, 2, appearance.eyebrows - 1, appearance.eyebrowsOpacity / 10.0)
-    SetPedHeadOverlayColor(ped, 2, 1, appearance.hairColor - 1, appearance.hairHighlight - 1)
+    local eyebrowIndex = appearanceOptions.eyebrows.values[appearance.eyebrows] or -1
+    SetPedHeadOverlay(ped, 2, eyebrowIndex, appearance.eyebrowsOpacity / 10.0)
+    SetPedHeadOverlayColor(ped, 2, 1, hairColor, hairHighlight)
 
-    SetPedHeadOverlay(ped, 4, appearance.makeupStyle - 1, appearance.makeupOpacity / 10.0)
-    SetPedHeadOverlayColor(ped, 4, 2, appearance.makeupStyle - 1, 0)
+    local makeupIndex = appearanceOptions.makeups.values[appearance.makeupStyle] or -1
+    local makeupColor = appearanceOptions.makeupColors.values[appearance.makeupColor] or 0
+    SetPedHeadOverlay(ped, 4, makeupIndex, appearance.makeupOpacity / 10.0)
+    SetPedHeadOverlayColor(ped, 4, 2, makeupColor, 0)
 
-    SetPedHeadOverlay(ped, 8, appearance.lipstickStyle - 1, appearance.lipstickOpacity / 10.0)
-    SetPedHeadOverlayColor(ped, 8, 2, appearance.lipstickStyle - 1, 0)
+    local lipstickIndex = appearanceOptions.lipsticks.values[appearance.lipstickStyle] or -1
+    local lipstickColor = appearanceOptions.lipstickColors.values[appearance.lipstickColor] or 0
+    SetPedHeadOverlay(ped, 8, lipstickIndex, appearance.lipstickOpacity / 10.0)
+    SetPedHeadOverlayColor(ped, 8, 2, lipstickColor, 0)
 
-    SetPedHeadOverlay(ped, 0, appearance.blemishes - 1, 1.0)
-    SetPedHeadOverlay(ped, 3, appearance.ageing - 1, 1.0)
+    local blemishIndex = appearanceOptions.blemishes.values[appearance.blemishes] or -1
+    SetPedHeadOverlay(ped, 0, blemishIndex, 1.0)
+
+    local ageingIndex = appearanceOptions.ageing.values[appearance.ageing] or -1
+    SetPedHeadOverlay(ped, 3, ageingIndex, 1.0)
 end
 
 local function applyWardrobe()
@@ -340,10 +445,12 @@ local function applyModel(model)
     SetPlayerModel(PlayerId(), hash)
     SetModelAsNoLongerNeeded(hash)
 
+    -- Rafraîchir les options après changement de ped
     refreshWardrobeOptions()
     refreshPropOptions()
+    refreshAppearanceOptions()
 
-    -- Re-apply the customization after swapping ped models
+    -- Re-appliquer la customisation
     applyHeritage()
     applyFaceFeatures()
     applyPedAppearance()
@@ -428,21 +535,21 @@ RageUI.CreateWhile(1.0, function()
     if RageUI.Visible(RMenu:Get(menuName, 'appearance')) then
         RageUI.DrawContent({ header = true, glare = true, instructionalButton = true }, function()
             RageUI.Separator("~b~Cheveux")
-            RageUI.List("Style", hairStyles, appearance.hairStyle, "Choisissez une coupe.", {}, true, function(_, _, _, Index)
+            RageUI.List("Style", appearanceOptions.hairStyles.labels, appearance.hairStyle, "Choisissez une coupe.", {}, true, function(_, _, _, Index)
                 appearance.hairStyle = Index
                 applyPedAppearance()
             end)
-            RageUI.List("Couleur", hairColors, appearance.hairColor, "Teinte principale.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur", appearanceOptions.hairColors.labels, appearance.hairColor, "Teinte principale.", {}, true, function(_, _, _, Index)
                 appearance.hairColor = Index
                 applyPedAppearance()
             end)
-            RageUI.List("Mèches", hairColors, appearance.hairHighlight, "Couleur secondaire.", {}, true, function(_, _, _, Index)
+            RageUI.List("Mèches", appearanceOptions.hairColors.labels, appearance.hairHighlight, "Couleur secondaire.", {}, true, function(_, _, _, Index)
                 appearance.hairHighlight = Index
                 applyPedAppearance()
             end)
 
             RageUI.Separator("~b~Sourcils")
-            RageUI.List("Forme", eyebrows, appearance.eyebrows, "Style de sourcil.", {}, true, function(_, _, _, Index)
+            RageUI.List("Forme", appearanceOptions.eyebrows.labels, appearance.eyebrows, "Style de sourcil.", {}, true, function(_, _, _, Index)
                 appearance.eyebrows = Index
                 applyPedAppearance()
             end)
@@ -452,7 +559,7 @@ RageUI.CreateWhile(1.0, function()
             end)
 
             RageUI.Separator("~b~Maquillage")
-            RageUI.List("Maquillage", makeups, appearance.makeupStyle, "Sélection du style.", {}, true, function(_, _, _, Index)
+            RageUI.List("Maquillage", appearanceOptions.makeups.labels, appearance.makeupStyle, "Sélection du style.", {}, true, function(_, _, _, Index)
                 appearance.makeupStyle = Index
                 applyPedAppearance()
             end)
@@ -460,8 +567,16 @@ RageUI.CreateWhile(1.0, function()
                 appearance.makeupOpacity = Index
                 applyPedAppearance()
             end)
-            RageUI.List("Rouge à lèvres", lipsticks, appearance.lipstickStyle, "Couleur des lèvres.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur maquillage", appearanceOptions.makeupColors.labels, appearance.makeupColor, "Choisissez la couleur.", {}, true, function(_, _, _, Index)
+                appearance.makeupColor = Index
+                applyPedAppearance()
+            end)
+            RageUI.List("Rouge à lèvres", appearanceOptions.lipsticks.labels, appearance.lipstickStyle, "Couleur des lèvres.", {}, true, function(_, _, _, Index)
                 appearance.lipstickStyle = Index
+                applyPedAppearance()
+            end)
+            RageUI.List("Couleur lèvres", appearanceOptions.lipstickColors.labels, appearance.lipstickColor, "Teinte du rouge à lèvres.", {}, true, function(_, _, _, Index)
+                appearance.lipstickColor = Index
                 applyPedAppearance()
             end)
             RageUI.Slider("Opacité lèvres", appearance.lipstickOpacity, 10, "Intensité du rouge à lèvres.", false, {}, true, function(_, _, _, Index)
@@ -577,6 +692,7 @@ RageUI.CreateWhile(1.0, function()
                     if Selected then
                         data.saved = not data.saved
                         data.note = data.saved and "Sauvegardé" or "Vide"
+                        -- Ici tu pourras plus tard lier à un système de sauvegarde réel
                     end
                 end)
             end
@@ -593,7 +709,7 @@ RageUI.CreateWhile(1.0, function()
             end)
             RageUI.Button("Sauvegarder", "Enregistrer dans le profil sélectionné.", { RightLabel = "ENREGISTRER" }, true, function(_, _, Selected)
                 if Selected then
-                    -- Logique de sauvegarde à implémenter
+                    -- Logique de sauvegarde à implémenter (ex: TriggerServerEvent vers qb-core / skin / etc.)
                 end
             end)
             RageUI.Button("Charger", "Charger le profil sélectionné.", { RightLabel = "CHARGER" }, true, function(_, _, Selected)
