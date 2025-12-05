@@ -17,6 +17,7 @@ RMenu.Add(menuName, 'props', RageUI.CreateSubMenu(RMenu:Get(menuName, 'main'), "
 RMenu.Add(menuName, 'model', RageUI.CreateSubMenu(RMenu:Get(menuName, 'main'), "MODÈLE", "Modèles Freemode"))
 RMenu.Add(menuName, 'outfits', RageUI.CreateSubMenu(RMenu:Get(menuName, 'main'), "TENUES", "Emplacements sauvegardés"))
 RMenu.Add(menuName, 'persistence', RageUI.CreateSubMenu(RMenu:Get(menuName, 'main'), "SAUVEGARDE", "Profils de personnage"))
+RMenu.Add(menuName, 'outfit_detail', RageUI.CreateSubMenu(RMenu:Get(menuName, 'outfits'), "DÉTAILS", "Gestion de la tenue"))
 
 ---@param menu table
 local function toggleMenu(menu)
@@ -208,6 +209,8 @@ local persistence = {
     slots = { "Profil A", "Profil B", "Profil C", "Profil D" },
 }
 
+local selectedOutfitSlot = 1
+
 local textureHint = "~c~<i>Variations de texture.</i>"
 
 ---@type table
@@ -228,6 +231,104 @@ local function clampSelection(selection, max)
     if selection > max then return max end
     return selection
 end
+
+local function promptForText(title, defaultText, maxLength)
+    AddTextEntry('RAGEUI_APPEARANCE_INPUT', title)
+    DisplayOnscreenKeyboard(1, 'RAGEUI_APPEARANCE_INPUT', '', defaultText or '', '', '', '', maxLength or 30)
+
+    while true do
+        local update = UpdateOnscreenKeyboard()
+
+        if update == 1 then
+            local result = GetOnscreenKeyboardResult()
+            return result and result ~= '' and result or nil
+        elseif update == 2 then
+            return nil
+        end
+
+        Citizen.Wait(0)
+    end
+end
+
+local function refreshPersistenceSlots()
+    persistence.slots = {}
+
+    for _, entry in ipairs(outfits) do
+        local status = entry.saved and "~g~Sauvegardé" or "~c~Vide"
+        table.insert(persistence.slots, string.format("%s ~s~(%s)", entry.label, status))
+    end
+
+    persistence.slot = clampSelection(persistence.slot, #persistence.slots)
+    selectedOutfitSlot = clampSelection(selectedOutfitSlot, #outfits)
+end
+
+local function setOutfitLabel(slot, label)
+    local entry = outfits[slot]
+    if not entry or not label then return end
+
+    entry.label = label
+
+    if outfitSnapshots[slot] then
+        outfitSnapshots[slot].label = label
+    end
+
+    refreshPersistenceSlots()
+end
+
+local function setOutfitNote(slot, note)
+    local entry = outfits[slot]
+    if not entry or not note then return end
+
+    entry.note = note
+
+    if outfitSnapshots[slot] then
+        outfitSnapshots[slot].note = note
+    end
+
+    refreshPersistenceSlots()
+end
+
+local function renameOutfitSlot(slot)
+    local entry = outfits[slot]
+    if not entry then return end
+
+    local newLabel = promptForText("Nom de la tenue", entry.label, 20)
+    if newLabel then
+        setOutfitLabel(slot, newLabel)
+    end
+end
+
+local function updateOutfitNote(slot)
+    local entry = outfits[slot]
+    if not entry then return end
+
+    local newNote = promptForText("Note / mémo", entry.note ~= "Vide" and entry.note or "", 35)
+    if newNote then
+        setOutfitNote(slot, newNote ~= '' and newNote or entry.note)
+    end
+end
+
+local function normalizedNote(entry)
+    if not entry then return "" end
+    if entry.note and entry.note ~= '' and entry.note ~= "Vide" then
+        return entry.note
+    end
+
+    return "Sans note"
+end
+
+local function saveOutfit(slot)
+    local entry = outfits[slot]
+    if not entry then return end
+
+    if entry.note == "Vide" or entry.note == '' then
+        entry.note = "Sauvegardé"
+    end
+
+    TriggerServerEvent('rageui:appearance:saveOutfit', slot, buildOutfitPayload(slot))
+end
+
+refreshPersistenceSlots()
 
 local function buildComponentOptions(componentId, includeNone)
     local ped = getPlayerPed()
@@ -437,7 +538,7 @@ local function buildOutfitPayload(slot)
     return {
         slot = slot,
         label = entry and entry.label or string.format("Tenue %02d", slot),
-        note = entry and entry.note or "Sauvegardé",
+        note = normalizedNote(entry),
         model = pedModel.models[pedModel.index].model,
         heritage = deepCopy(heritage),
         features = deepCopy(features),
@@ -760,6 +861,7 @@ RegisterNetEvent('rageui:appearance:outfitsResponse', function(serverOutfits)
 
         if snapshot then
             data.saved = true
+            data.label = snapshot.label or data.label
             data.note = snapshot.note or data.note
             outfitSnapshots[slot] = snapshot
         else
@@ -768,24 +870,32 @@ RegisterNetEvent('rageui:appearance:outfitsResponse', function(serverOutfits)
             outfitSnapshots[slot] = nil
         end
     end
+
+    refreshPersistenceSlots()
 end)
 
 RegisterNetEvent('rageui:appearance:outfitSaved', function(slot, payload)
     if not outfits[slot] then return end
 
     outfits[slot].saved = true
+    outfits[slot].label = payload.label or outfits[slot].label
     outfits[slot].note = payload.note or outfits[slot].note
     outfitSnapshots[slot] = payload
+
+    refreshPersistenceSlots()
 end)
 
 RegisterNetEvent('rageui:appearance:applyOutfitClient', function(payload, slot)
     if slot and outfits[slot] then
         outfits[slot].saved = true
+        outfits[slot].label = payload.label or outfits[slot].label
         outfits[slot].note = payload.note or outfits[slot].note
     end
 
     outfitSnapshots[slot] = payload
     applyOutfitSnapshot(payload)
+
+    refreshPersistenceSlots()
 end)
 
 CreateThread(function()
@@ -1126,19 +1236,14 @@ RageUI.CreateWhile(1.0, function()
             RageUI.Separator("~b~Emplacements")
             for slot, data in ipairs(outfits) do
                 local badge = data.saved and RageUI.BadgeStyle.Star or RageUI.BadgeStyle.None
-                local subtitle = data.saved and data.note or "Vide"
-                local rightLabel = data.saved and "CHARGER" or "ENREGISTRER"
+                local subtitle = string.format("%s | %s", data.saved and "~g~Sauvegardé" or "~c~Vide", normalizedNote(data))
+                local rightLabel = data.saved and "GESTION" or "NOUVELLE"
 
                 RageUI.Button(data.label, subtitle, { RightBadge = badge, RightLabel = rightLabel }, true, function(_, _, Selected)
                     if Selected then
-                        if data.saved then
-                            TriggerServerEvent('rageui:appearance:loadOutfit', slot)
-                        else
-                            data.note = "Sauvegarde..."
-                            TriggerServerEvent('rageui:appearance:saveOutfit', slot, buildOutfitPayload(slot))
-                        end
+                        selectedOutfitSlot = slot
                     end
-                end)
+                end, RMenu:Get(menuName, 'outfit_detail'))
             end
         end)
     end
@@ -1148,17 +1253,77 @@ RageUI.CreateWhile(1.0, function()
             RageUI.Checkbox("Autosave", "Sauvegarde automatique à la fermeture.", persistence.autosave, { Style = RageUI.CheckboxStyle.Tick }, function(_, _, _, Checked)
                 persistence.autosave = Checked
             end)
-            RageUI.List("Profil actif", persistence.slots, persistence.slot, "Choisissez le profil.", {}, true, function(_, _, _, Index)
+
+            RageUI.List("Emplacement", persistence.slots, persistence.slot, "Synchronisé avec la liste des tenues.", {}, true, function(_, _, _, Index)
                 persistence.slot = Index
+                selectedOutfitSlot = Index
             end)
-            RageUI.Button("Sauvegarder", "Enregistrer dans le profil sélectionné.", { RightLabel = "ENREGISTRER" }, true, function(_, _, Selected)
+
+            local entry = outfits[persistence.slot]
+
+            if entry then
+                RageUI.Separator(string.format("~b~%s", entry.label))
+                RageUI.Separator(entry.saved and "~g~Sauvegarde disponible" or "~c~Emplacement vide")
+                RageUI.Separator(string.format("Note : %s", normalizedNote(entry)))
+
+                RageUI.Button("Renommer l'emplacement", "Met à jour le nom dans les deux menus.", { RightLabel = "RENOMMER" }, true, function(_, _, Selected)
+                    if Selected then
+                        renameOutfitSlot(persistence.slot)
+                    end
+                end)
+
+                RageUI.Button("Modifier la note", "Ajoutez un mémo sur la tenue.", { RightLabel = "MODIFIER" }, true, function(_, _, Selected)
+                    if Selected then
+                        updateOutfitNote(persistence.slot)
+                    end
+                end)
+
+                RageUI.Button("Sauvegarder", "Enregistrer dans l'emplacement sélectionné.", { RightLabel = "ENREGISTRER" }, true, function(_, _, Selected)
+                    if Selected then
+                        saveOutfit(persistence.slot)
+                    end
+                end)
+
+                RageUI.Button("Charger", "Charger l'emplacement sélectionné.", { RightLabel = "CHARGER" }, entry.saved, function(_, _, Selected)
+                    if Selected then
+                        TriggerServerEvent('rageui:appearance:loadOutfit', persistence.slot)
+                    end
+                end)
+            end
+        end)
+    end
+
+    if RageUI.Visible(RMenu:Get(menuName, 'outfit_detail')) then
+        RageUI.DrawContent({ header = true, glare = true, instructionalButton = true }, function()
+            local entry = outfits[selectedOutfitSlot]
+
+            if not entry then return end
+
+            RageUI.Separator(string.format("~b~%s", entry.label))
+            RageUI.Separator(entry.saved and "~g~Sauvegarde disponible" or "~c~Emplacement vide")
+            RageUI.Separator(string.format("Note : %s", normalizedNote(entry)))
+
+            RageUI.Button("Renommer l'emplacement", "Le nom est partagé avec la section Sauvegarder / Charger.", { RightLabel = "RENOMMER" }, true, function(_, _, Selected)
                 if Selected then
-                    TriggerServerEvent('rageui:appearance:saveOutfit', persistence.slot, buildOutfitPayload(persistence.slot))
+                    renameOutfitSlot(selectedOutfitSlot)
                 end
             end)
-            RageUI.Button("Charger", "Charger le profil sélectionné.", { RightLabel = "CHARGER" }, true, function(_, _, Selected)
+
+            RageUI.Button("Ajouter une note", "Permet de mémoriser le contexte de la tenue.", { RightLabel = "MODIFIER" }, true, function(_, _, Selected)
                 if Selected then
-                    TriggerServerEvent('rageui:appearance:loadOutfit', persistence.slot)
+                    updateOutfitNote(selectedOutfitSlot)
+                end
+            end)
+
+            RageUI.Button("Enregistrer la tenue", "Sauvegarder les paramètres actuels sur cet emplacement.", { RightLabel = "ENREGISTRER" }, true, function(_, _, Selected)
+                if Selected then
+                    saveOutfit(selectedOutfitSlot)
+                end
+            end)
+
+            RageUI.Button("Charger la tenue", entry.saved and "Applique la tenue sauvegardée." or "Aucune sauvegarde disponible.", { RightLabel = "CHARGER" }, entry.saved, function(_, _, Selected)
+                if Selected then
+                    TriggerServerEvent('rageui:appearance:loadOutfit', selectedOutfitSlot)
                 end
             end)
         end)
@@ -1166,7 +1331,7 @@ RageUI.CreateWhile(1.0, function()
 end, 1)
 
 RegisterCommand('delete-appearance-menu', function()
-    for _, name in ipairs({ 'main', 'heritage', 'features', 'appearance', 'wardrobe', 'props', 'model', 'outfits', 'persistence' }) do
+    for _, name in ipairs({ 'main', 'heritage', 'features', 'appearance', 'wardrobe', 'props', 'model', 'outfits', 'persistence', 'outfit_detail' }) do
         RMenu:Delete(menuName, name)
     end
 end, false)
