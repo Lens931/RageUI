@@ -30,6 +30,10 @@ end, false)
 
 RegisterKeyMapping(toggleCommand, 'Ouvrir le menu d\'apparence', 'keyboard', 'F3')
 
+RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
+    RageUI.CloseAll()
+end)
+
 ---@type table
 local parents = {
     fathers = {
