@@ -119,6 +119,32 @@ local wardrobeOptions = {
     armors = { labels = {}, values = {} },
 }
 
+local wardrobeTextures = {
+    tshirt = 1,
+    torso = 1,
+    pants = 1,
+    shoes = 1,
+    jacket = 1,
+    mask = 1,
+    bag = 1,
+    accessory = 1,
+    decals = 1,
+    armor = 1,
+}
+
+local wardrobeTextureOptions = {
+    tshirts = { labels = {}, values = {} },
+    torsos = { labels = {}, values = {} },
+    jackets = { labels = {}, values = {} },
+    pants = { labels = {}, values = {} },
+    shoes = { labels = {}, values = {} },
+    masks = { labels = {}, values = {} },
+    bags = { labels = {}, values = {} },
+    accessories = { labels = {}, values = {} },
+    decals = { labels = {}, values = {} },
+    armors = { labels = {}, values = {} },
+}
+
 ---@type table
 local props = {
     hats = 1,
@@ -129,6 +155,22 @@ local props = {
 }
 
 local propOptions = {
+    hats = { labels = {}, values = {} },
+    glasses = { labels = {}, values = {} },
+    ears = { labels = {}, values = {} },
+    watches = { labels = {}, values = {} },
+    bracelets = { labels = {}, values = {} },
+}
+
+local propTextures = {
+    hats = 1,
+    glasses = 1,
+    ears = 1,
+    watches = 1,
+    bracelets = 1,
+}
+
+local propTextureOptions = {
     hats = { labels = {}, values = {} },
     glasses = { labels = {}, values = {} },
     ears = { labels = {}, values = {} },
@@ -191,6 +233,25 @@ local function buildComponentOptions(componentId, includeNone)
 
     if #labels == 0 then
         table.insert(labels, "Variation 00")
+        table.insert(values, 0)
+    end
+
+    return labels, values
+end
+
+local function buildComponentTextureOptions(componentId, drawable)
+    local ped = getPlayerPed()
+    local labels = {}
+    local values = {}
+
+    local total = GetNumberOfPedTextureVariations(ped, componentId, drawable)
+    for texture = 0, math.max(total, 1) - 1 do
+        table.insert(labels, string.format("Texture %02d", texture))
+        table.insert(values, texture)
+    end
+
+    if #labels == 0 then
+        table.insert(labels, "Texture 00")
         table.insert(values, 0)
     end
 
@@ -273,6 +334,25 @@ local function buildPropOptions(propId)
     return labels, values
 end
 
+local function buildPropTextureOptions(propId, drawable)
+    local ped = getPlayerPed()
+    local labels = {}
+    local values = {}
+
+    local total = GetNumberOfPedPropTextureVariations(ped, propId, drawable)
+    for texture = 0, math.max(total, 1) - 1 do
+        table.insert(labels, string.format("Texture %02d", texture))
+        table.insert(values, texture)
+    end
+
+    if #labels == 0 then
+        table.insert(labels, "Texture 00")
+        table.insert(values, 0)
+    end
+
+    return labels, values
+end
+
 local function refreshWardrobeOptions()
     wardrobeOptions.masks.labels, wardrobeOptions.masks.values = buildComponentOptions(1, true)
     wardrobeOptions.tshirts.labels, wardrobeOptions.tshirts.values = buildComponentOptions(8, false)
@@ -295,6 +375,25 @@ local function refreshWardrobeOptions()
     wardrobe.accessory = clampSelection(wardrobe.accessory, #wardrobeOptions.accessories.labels)
     wardrobe.decals = clampSelection(wardrobe.decals, #wardrobeOptions.decals.labels)
     wardrobe.armor = clampSelection(wardrobe.armor, #wardrobeOptions.armors.labels)
+
+    local mappings = {
+        { key = 'tshirt', option = 'tshirts', componentId = 8 },
+        { key = 'torso', option = 'torsos', componentId = 11 },
+        { key = 'jacket', option = 'jackets', componentId = 3 },
+        { key = 'pants', option = 'pants', componentId = 4 },
+        { key = 'shoes', option = 'shoes', componentId = 6 },
+        { key = 'mask', option = 'masks', componentId = 1 },
+        { key = 'bag', option = 'bags', componentId = 5 },
+        { key = 'accessory', option = 'accessories', componentId = 7 },
+        { key = 'decals', option = 'decals', componentId = 10 },
+        { key = 'armor', option = 'armors', componentId = 9 },
+    }
+
+    for _, entry in ipairs(mappings) do
+        local drawable = wardrobeOptions[entry.option].values[wardrobe[entry.key]] or 0
+        wardrobeTextureOptions[entry.option].labels, wardrobeTextureOptions[entry.option].values = buildComponentTextureOptions(entry.componentId, drawable)
+        wardrobeTextures[entry.key] = clampSelection(wardrobeTextures[entry.key], #wardrobeTextureOptions[entry.option].labels)
+    end
 end
 
 local function refreshPropOptions()
@@ -309,6 +408,20 @@ local function refreshPropOptions()
     props.ears = clampSelection(props.ears, #propOptions.ears.labels)
     props.watches = clampSelection(props.watches, #propOptions.watches.labels)
     props.bracelets = clampSelection(props.bracelets, #propOptions.bracelets.labels)
+
+    local mappings = {
+        { key = 'hats', propId = 0 },
+        { key = 'glasses', propId = 1 },
+        { key = 'ears', propId = 2 },
+        { key = 'watches', propId = 6 },
+        { key = 'bracelets', propId = 7 },
+    }
+
+    for _, entry in ipairs(mappings) do
+        local drawable = propOptions[entry.key].values[props[entry.key]] or -1
+        propTextureOptions[entry.key].labels, propTextureOptions[entry.key].values = buildPropTextureOptions(entry.propId, math.max(drawable, 0))
+        propTextures[entry.key] = clampSelection(propTextures[entry.key], #propTextureOptions[entry.key].labels)
+    end
 end
 
 local function refreshAppearanceOptions()
@@ -399,40 +512,42 @@ end
 local function applyWardrobe()
     local ped = getPlayerPed()
 
-    local function setComponent(componentId, index, options)
+    local function setComponent(componentId, index, textureIndex, options, textureOptions)
         local drawable = options.values[index] or 0
-        SetPedComponentVariation(ped, componentId, drawable, 0, 0)
+        local texture = textureOptions.values[textureIndex] or 0
+        SetPedComponentVariation(ped, componentId, drawable, texture, 0)
     end
 
-    setComponent(1, wardrobe.mask, wardrobeOptions.masks)
-    setComponent(8, wardrobe.tshirt, wardrobeOptions.tshirts)
-    setComponent(11, wardrobe.torso, wardrobeOptions.torsos)
-    setComponent(3, wardrobe.jacket, wardrobeOptions.jackets)
-    setComponent(4, wardrobe.pants, wardrobeOptions.pants)
-    setComponent(6, wardrobe.shoes, wardrobeOptions.shoes)
-    setComponent(5, wardrobe.bag, wardrobeOptions.bags)
-    setComponent(7, wardrobe.accessory, wardrobeOptions.accessories)
-    setComponent(10, wardrobe.decals, wardrobeOptions.decals)
-    setComponent(9, wardrobe.armor, wardrobeOptions.armors)
+    setComponent(1, wardrobe.mask, wardrobeTextures.mask, wardrobeOptions.masks, wardrobeTextureOptions.masks)
+    setComponent(8, wardrobe.tshirt, wardrobeTextures.tshirt, wardrobeOptions.tshirts, wardrobeTextureOptions.tshirts)
+    setComponent(11, wardrobe.torso, wardrobeTextures.torso, wardrobeOptions.torsos, wardrobeTextureOptions.torsos)
+    setComponent(3, wardrobe.jacket, wardrobeTextures.jacket, wardrobeOptions.jackets, wardrobeTextureOptions.jackets)
+    setComponent(4, wardrobe.pants, wardrobeTextures.pants, wardrobeOptions.pants, wardrobeTextureOptions.pants)
+    setComponent(6, wardrobe.shoes, wardrobeTextures.shoes, wardrobeOptions.shoes, wardrobeTextureOptions.shoes)
+    setComponent(5, wardrobe.bag, wardrobeTextures.bag, wardrobeOptions.bags, wardrobeTextureOptions.bags)
+    setComponent(7, wardrobe.accessory, wardrobeTextures.accessory, wardrobeOptions.accessories, wardrobeTextureOptions.accessories)
+    setComponent(10, wardrobe.decals, wardrobeTextures.decals, wardrobeOptions.decals, wardrobeTextureOptions.decals)
+    setComponent(9, wardrobe.armor, wardrobeTextures.armor, wardrobeOptions.armors, wardrobeTextureOptions.armors)
 end
 
 local function applyProps()
     local ped = getPlayerPed()
 
-    local function setProp(propId, index, options)
+    local function setProp(propId, index, textureIndex, options, textureOptions)
         local drawable = options.values[index] or -1
         if drawable == -1 then
             ClearPedProp(ped, propId)
         else
-            SetPedPropIndex(ped, propId, drawable, 0, true)
+            local texture = textureOptions.values[textureIndex] or 0
+            SetPedPropIndex(ped, propId, drawable, texture, true)
         end
     end
 
-    setProp(0, props.hats, propOptions.hats)
-    setProp(1, props.glasses, propOptions.glasses)
-    setProp(2, props.ears, propOptions.ears)
-    setProp(6, props.watches, propOptions.watches)
-    setProp(7, props.bracelets, propOptions.bracelets)
+    setProp(0, props.hats, propTextures.hats, propOptions.hats, propTextureOptions.hats)
+    setProp(1, props.glasses, propTextures.glasses, propOptions.glasses, propTextureOptions.glasses)
+    setProp(2, props.ears, propTextures.ears, propOptions.ears, propTextureOptions.ears)
+    setProp(6, props.watches, propTextures.watches, propOptions.watches, propTextureOptions.watches)
+    setProp(7, props.bracelets, propTextures.bracelets, propOptions.bracelets, propTextureOptions.bracelets)
 end
 
 local function applyModel(model)
@@ -596,48 +711,119 @@ RageUI.CreateWhile(1.0, function()
         end)
     end
 
+
     if RageUI.Visible(RMenu:Get(menuName, 'wardrobe')) then
         RageUI.DrawContent({ header = true, glare = true, instructionalButton = true }, function()
             RageUI.Separator("~b~Tenue de base")
             RageUI.List("T-shirt", wardrobeOptions.tshirts.labels, wardrobe.tshirt, "Couche intérieure.", {}, true, function(_, _, _, Index)
                 wardrobe.tshirt = Index
+                local drawable = wardrobeOptions.tshirts.values[wardrobe.tshirt] or 0
+                wardrobeTextureOptions.tshirts.labels, wardrobeTextureOptions.tshirts.values = buildComponentTextureOptions(8, drawable)
+                wardrobeTextures.tshirt = clampSelection(wardrobeTextures.tshirt, #wardrobeTextureOptions.tshirts.labels)
+                applyWardrobe()
+            end)
+            RageUI.List("Couleur T-shirt", wardrobeTextureOptions.tshirts.labels, wardrobeTextures.tshirt, "Variations de texture.", {}, true, function(_, _, _, Index)
+                wardrobeTextures.tshirt = Index
                 applyWardrobe()
             end)
             RageUI.List("Torse", wardrobeOptions.torsos.labels, wardrobe.torso, "Couche principale.", {}, true, function(_, _, _, Index)
                 wardrobe.torso = Index
+                local drawable = wardrobeOptions.torsos.values[wardrobe.torso] or 0
+                wardrobeTextureOptions.torsos.labels, wardrobeTextureOptions.torsos.values = buildComponentTextureOptions(11, drawable)
+                wardrobeTextures.torso = clampSelection(wardrobeTextures.torso, #wardrobeTextureOptions.torsos.labels)
+                applyWardrobe()
+            end)
+            RageUI.List("Couleur Torse", wardrobeTextureOptions.torsos.labels, wardrobeTextures.torso, "Variations de texture.", {}, true, function(_, _, _, Index)
+                wardrobeTextures.torso = Index
                 applyWardrobe()
             end)
             RageUI.List("Veste", wardrobeOptions.jackets.labels, wardrobe.jacket, "Couche extérieure.", {}, true, function(_, _, _, Index)
                 wardrobe.jacket = Index
+                local drawable = wardrobeOptions.jackets.values[wardrobe.jacket] or 0
+                wardrobeTextureOptions.jackets.labels, wardrobeTextureOptions.jackets.values = buildComponentTextureOptions(3, drawable)
+                wardrobeTextures.jacket = clampSelection(wardrobeTextures.jacket, #wardrobeTextureOptions.jackets.labels)
+                applyWardrobe()
+            end)
+            RageUI.List("Couleur Veste", wardrobeTextureOptions.jackets.labels, wardrobeTextures.jacket, "Variations de texture.", {}, true, function(_, _, _, Index)
+                wardrobeTextures.jacket = Index
                 applyWardrobe()
             end)
             RageUI.List("Pantalon", wardrobeOptions.pants.labels, wardrobe.pants, "Bas du corps.", {}, true, function(_, _, _, Index)
                 wardrobe.pants = Index
+                local drawable = wardrobeOptions.pants.values[wardrobe.pants] or 0
+                wardrobeTextureOptions.pants.labels, wardrobeTextureOptions.pants.values = buildComponentTextureOptions(4, drawable)
+                wardrobeTextures.pants = clampSelection(wardrobeTextures.pants, #wardrobeTextureOptions.pants.labels)
+                applyWardrobe()
+            end)
+            RageUI.List("Couleur Pantalon", wardrobeTextureOptions.pants.labels, wardrobeTextures.pants, "Variations de texture.", {}, true, function(_, _, _, Index)
+                wardrobeTextures.pants = Index
                 applyWardrobe()
             end)
             RageUI.List("Chaussures", wardrobeOptions.shoes.labels, wardrobe.shoes, "Choix de chaussures.", {}, true, function(_, _, _, Index)
                 wardrobe.shoes = Index
+                local drawable = wardrobeOptions.shoes.values[wardrobe.shoes] or 0
+                wardrobeTextureOptions.shoes.labels, wardrobeTextureOptions.shoes.values = buildComponentTextureOptions(6, drawable)
+                wardrobeTextures.shoes = clampSelection(wardrobeTextures.shoes, #wardrobeTextureOptions.shoes.labels)
+                applyWardrobe()
+            end)
+            RageUI.List("Couleur Chaussures", wardrobeTextureOptions.shoes.labels, wardrobeTextures.shoes, "Variations de texture.", {}, true, function(_, _, _, Index)
+                wardrobeTextures.shoes = Index
                 applyWardrobe()
             end)
             RageUI.Separator("~b~Add-ons")
             RageUI.List("Masque", wardrobeOptions.masks.labels, wardrobe.mask, "Tous les masques disponibles.", {}, true, function(_, _, _, Index)
                 wardrobe.mask = Index
+                local drawable = wardrobeOptions.masks.values[wardrobe.mask] or 0
+                wardrobeTextureOptions.masks.labels, wardrobeTextureOptions.masks.values = buildComponentTextureOptions(1, drawable)
+                wardrobeTextures.mask = clampSelection(wardrobeTextures.mask, #wardrobeTextureOptions.masks.labels)
                 applyWardrobe()
             end)
-            RageUI.List("Sac / Parachute", wardrobeOptions.bags.labels, wardrobe.bag, "Sacs, sacoches ou parachute.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Masque", wardrobeTextureOptions.masks.labels, wardrobeTextures.mask, "Variations de texture.", {}, true, function(_, _, _, Index)
+                wardrobeTextures.mask = Index
+                applyWardrobe()
+            end)
+            RageUI.List("Sac / Parachute", wardrobeOptions.bags.labels, wardrobe.bag, "Sacs, sacoches ou parachute.", {}, true,function(_, _, _, Index)
                 wardrobe.bag = Index
+                local drawable = wardrobeOptions.bags.values[wardrobe.bag] or 0
+                wardrobeTextureOptions.bags.labels, wardrobeTextureOptions.bags.values = buildComponentTextureOptions(5, drawable)
+                wardrobeTextures.bag = clampSelection(wardrobeTextures.bag, #wardrobeTextureOptions.bags.labels)
+                applyWardrobe()
+            end)
+            RageUI.List("Couleur Sac / Parachute", wardrobeTextureOptions.bags.labels, wardrobeTextures.bag, "Variations de texture.", {}, true, function(_, _, _, Index)
+                wardrobeTextures.bag = Index
                 applyWardrobe()
             end)
             RageUI.List("Accessoire cou", wardrobeOptions.accessories.labels, wardrobe.accessory, "Cravates, colliers et foulards.", {}, true, function(_, _, _, Index)
                 wardrobe.accessory = Index
+                local drawable = wardrobeOptions.accessories.values[wardrobe.accessory] or 0
+                wardrobeTextureOptions.accessories.labels, wardrobeTextureOptions.accessories.values = buildComponentTextureOptions(7, drawable)
+                wardrobeTextures.accessory = clampSelection(wardrobeTextures.accessory, #wardrobeTextureOptions.accessories.labels)
+                applyWardrobe()
+            end)
+            RageUI.List("Couleur Accessoire", wardrobeTextureOptions.accessories.labels, wardrobeTextures.accessory, "Variations de texture.", {}, true, function(_, _, _, Index)
+                wardrobeTextures.accessory = Index
                 applyWardrobe()
             end)
             RageUI.List("Patchs / Décals", wardrobeOptions.decals.labels, wardrobe.decals, "Badges et patchs visibles.", {}, true, function(_, _, _, Index)
                 wardrobe.decals = Index
+                local drawable = wardrobeOptions.decals.values[wardrobe.decals] or 0
+                wardrobeTextureOptions.decals.labels, wardrobeTextureOptions.decals.values = buildComponentTextureOptions(10, drawable)
+                wardrobeTextures.decals = clampSelection(wardrobeTextures.decals, #wardrobeTextureOptions.decals.labels)
                 applyWardrobe()
             end)
-            RageUI.List("Gilet pare-balles", wardrobeOptions.armors.labels, wardrobe.armor, "Niveaux de protection.", {}, true, function(_, _, _, Index)
+            RageUI.List("Couleur Patchs / Décals", wardrobeTextureOptions.decals.labels, wardrobeTextures.decals, "Variations de texture.", {}, true, function(_, _, _, Index)
+                wardrobeTextures.decals = Index
+                applyWardrobe()
+            end)
+            RageUI.List("Gilet pare-balles", wardrobeOptions.armors.labels, wardrobe.armor, "Niveaux de protection.", {}, true,function(_, _, _, Index)
                 wardrobe.armor = Index
+                local drawable = wardrobeOptions.armors.values[wardrobe.armor] or 0
+                wardrobeTextureOptions.armors.labels, wardrobeTextureOptions.armors.values = buildComponentTextureOptions(9, drawable)
+                wardrobeTextures.armor = clampSelection(wardrobeTextures.armor, #wardrobeTextureOptions.armors.labels)
+                applyWardrobe()
+            end)
+            RageUI.List("Couleur Gilet", wardrobeTextureOptions.armors.labels, wardrobeTextures.armor, "Variations de texture.", {}, true, function(_, _, _, Index)
+                wardrobeTextures.armor = Index
                 applyWardrobe()
             end)
         end)
@@ -646,29 +832,63 @@ RageUI.CreateWhile(1.0, function()
     if RageUI.Visible(RMenu:Get(menuName, 'props')) then
         RageUI.DrawContent({ header = true, glare = true, instructionalButton = true }, function()
             RageUI.Separator("~b~Accessoires")
-            RageUI.List("Chapeaux", propOptions.hats.labels, props.hats, "Ajoutez un couvre-chef.", {}, true, function(_, _, _, Index)
+            RageUI.List("Chapeaux", propOptions.hats.labels, props.hats, "Ajoutez un couvre-chef.", {}, true, function(_, _, _,Index)
                 props.hats = Index
+                local drawable = propOptions.hats.values[props.hats] or -1
+                propTextureOptions.hats.labels, propTextureOptions.hats.values = buildPropTextureOptions(0, math.max(drawable, 0))
+                propTextures.hats = clampSelection(propTextures.hats, #propTextureOptions.hats.labels)
+                applyProps()
+            end)
+            RageUI.List("Couleur Chapeaux", propTextureOptions.hats.labels, propTextures.hats, "Variations de texture.", {}, true, function(_, _, _, Index)
+                propTextures.hats = Index
                 applyProps()
             end)
             RageUI.List("Lunettes", propOptions.glasses.labels, props.glasses, "Lunettes et montures.", {}, true, function(_, _, _, Index)
                 props.glasses = Index
+                local drawable = propOptions.glasses.values[props.glasses] or -1
+                propTextureOptions.glasses.labels, propTextureOptions.glasses.values = buildPropTextureOptions(1, math.max(drawable, 0))
+                propTextures.glasses = clampSelection(propTextures.glasses, #propTextureOptions.glasses.labels)
+                applyProps()
+            end)
+            RageUI.List("Couleur Lunettes", propTextureOptions.glasses.labels, propTextures.glasses, "Variations de texture.", {}, true, function(_, _, _, Index)
+                propTextures.glasses = Index
                 applyProps()
             end)
             RageUI.List("Oreilles", propOptions.ears.labels, props.ears, "Boucles ou studs.", {}, true, function(_, _, _, Index)
                 props.ears = Index
+                local drawable = propOptions.ears.values[props.ears] or -1
+                propTextureOptions.ears.labels, propTextureOptions.ears.values = buildPropTextureOptions(2, math.max(drawable, 0))
+                propTextures.ears = clampSelection(propTextures.ears, #propTextureOptions.ears.labels)
+                applyProps()
+            end)
+            RageUI.List("Couleur Oreilles", propTextureOptions.ears.labels, propTextures.ears, "Variations de texture.", {}, true, function(_, _, _, Index)
+                propTextures.ears = Index
                 applyProps()
             end)
             RageUI.List("Montres", propOptions.watches.labels, props.watches, "Choisissez un poignet.", {}, true, function(_, _, _, Index)
                 props.watches = Index
+                local drawable = propOptions.watches.values[props.watches] or -1
+                propTextureOptions.watches.labels, propTextureOptions.watches.values = buildPropTextureOptions(6, math.max(drawable, 0))
+                propTextures.watches = clampSelection(propTextures.watches, #propTextureOptions.watches.labels)
+                applyProps()
+            end)
+            RageUI.List("Couleur Montres", propTextureOptions.watches.labels, propTextures.watches, "Variations de texture.", {}, true, function(_, _, _, Index)
+                propTextures.watches = Index
                 applyProps()
             end)
             RageUI.List("Bracelets", propOptions.bracelets.labels, props.bracelets, "Accessoire de poignet.", {}, true, function(_, _, _, Index)
                 props.bracelets = Index
+                local drawable = propOptions.bracelets.values[props.bracelets] or -1
+                propTextureOptions.bracelets.labels, propTextureOptions.bracelets.values = buildPropTextureOptions(7, math.max(drawable, 0))
+                propTextures.bracelets = clampSelection(propTextures.bracelets, #propTextureOptions.bracelets.labels)
+                applyProps()
+            end)
+            RageUI.List("Couleur Bracelets", propTextureOptions.bracelets.labels, propTextures.bracelets, "Variations de texture.", {}, true, function(_, _, _, Index)
+                propTextures.bracelets = Index
                 applyProps()
             end)
         end)
     end
-
     if RageUI.Visible(RMenu:Get(menuName, 'model')) then
         RageUI.DrawContent({ header = true, glare = true, instructionalButton = true }, function()
             for i, entry in ipairs(pedModel.models) do
