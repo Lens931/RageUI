@@ -4,6 +4,126 @@ pcall(function()
     QBCore = exports['qb-core']:GetCoreObject()
 end)
 
+local dbProvider = nil
+
+local function tryGetDbProvider()
+    if dbProvider then return dbProvider end
+
+    if MySQL and (MySQL.query or (MySQL.Sync and (MySQL.Sync.execute or MySQL.Sync.fetchAll))) then
+        dbProvider = MySQL
+        return dbProvider
+    end
+
+    local ok, provider = pcall(function()
+        return exports.oxmysql
+    end)
+
+    if ok and provider then
+        dbProvider = provider
+        return dbProvider
+    end
+
+    ok, provider = pcall(function()
+        return exports['ghmattimysql']
+    end)
+
+    if ok and provider then
+        dbProvider = provider
+        return dbProvider
+    end
+
+    return nil
+end
+
+local function dbFetchAll(query, params)
+    local provider = tryGetDbProvider()
+    if not provider then return nil end
+
+    if provider.query and provider.query.await then
+        return provider.query.await(query, params)
+    end
+
+    if provider.Sync and provider.Sync.fetchAll then
+        return provider.Sync.fetchAll(query, params)
+    end
+
+    local ok, result = pcall(function()
+        return provider:executeSync(query, params)
+    end)
+
+    if ok then return result end
+
+    return nil
+end
+
+local function dbExecute(query, params)
+    local provider = tryGetDbProvider()
+    if not provider then return nil end
+
+    if provider.query and provider.query.await then
+        return provider.query.await(query, params)
+    end
+
+    if provider.Sync and provider.Sync.execute then
+        return provider.Sync.execute(query, params)
+    end
+
+    local ok, result = pcall(function()
+        return provider:executeSync(query, params)
+    end)
+
+    if ok then return result end
+
+    return nil
+end
+
+local function ensureOutfitTable()
+    if not tryGetDbProvider() then return end
+
+    dbExecute([[CREATE TABLE IF NOT EXISTS rageui_outfits (
+        id INT NOT NULL AUTO_INCREMENT,
+        identifier VARCHAR(64) NOT NULL,
+        slot INT NOT NULL,
+        payload LONGTEXT NOT NULL,
+        saved_at INT NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY identifier_slot (identifier, slot)
+    )]], {})
+end
+
+local function fetchOutfitsFromDatabase(identifier)
+    if not tryGetDbProvider() then return nil end
+
+    local results = dbFetchAll('SELECT slot, payload FROM rageui_outfits WHERE identifier = ?', { identifier })
+    if type(results) ~= 'table' then return nil end
+
+    local outfits = {}
+
+    for _, row in ipairs(results) do
+        local decoded = json.decode(row.payload or '{}')
+        if decoded then
+            outfits[tonumber(row.slot)] = decoded
+        end
+    end
+
+    return outfits
+end
+
+local function saveOutfitToDatabase(identifier, payload)
+    if not tryGetDbProvider() then return end
+
+    dbExecute([[INSERT INTO rageui_outfits (identifier, slot, payload, saved_at)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE payload = VALUES(payload), saved_at = VALUES(saved_at)]], {
+        identifier,
+        payload.slot,
+        json.encode(payload),
+        payload.savedAt or os.time(),
+    })
+end
+
+ensureOutfitTable()
+
 local fallbackStorage = {}
 
 local function getIdentifier(src)
@@ -16,6 +136,9 @@ local function getIdentifier(src)
 end
 
 local function loadOutfits(Player, identifier)
+    local outfits = fetchOutfitsFromDatabase(identifier)
+    if outfits then return outfits end
+
     if Player then
         return Player.PlayerData.metadata.appearance_outfits or {}
     end
@@ -24,7 +147,12 @@ local function loadOutfits(Player, identifier)
     return fallbackStorage[identifier]
 end
 
-local function persistOutfits(Player, identifier, outfits)
+local function persistOutfits(Player, identifier, outfits, changedPayload)
+    if tryGetDbProvider() and changedPayload then
+        saveOutfitToDatabase(identifier, changedPayload)
+        return
+    end
+
     if Player then
         Player.Functions.SetMetaData('appearance_outfits', outfits)
     else
@@ -54,7 +182,7 @@ RegisterNetEvent('rageui:appearance:saveOutfit', function(slot, payload)
     payload.savedAt = os.time()
 
     outfits[slot] = payload
-    persistOutfits(Player, identifier, outfits)
+    persistOutfits(Player, identifier, outfits, payload)
 
     TriggerClientEvent('rageui:appearance:outfitSaved', src, slot, payload)
 end)
