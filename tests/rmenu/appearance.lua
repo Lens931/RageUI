@@ -197,6 +197,7 @@ local function buildComponentOptions(componentId, includeNone)
     return labels, values
 end
 
+-- Options couleurs de cheveux
 local function buildHairColorOptions()
     local labels = {}
     local values = {}
@@ -215,6 +216,7 @@ local function buildHairColorOptions()
     return labels, values
 end
 
+-- Options overlays (sourcils, maquillage, etc.)
 local function buildOverlayOptions(overlayId, includeNone)
     local labels = {}
     local values = {}
@@ -238,6 +240,7 @@ local function buildOverlayOptions(overlayId, includeNone)
     return labels, values
 end
 
+-- Options couleurs de maquillage
 local function buildMakeupColorOptions()
     local labels = {}
     local values = {}
@@ -331,6 +334,7 @@ local function refreshAppearanceOptions()
     appearance.ageing = clampSelection(appearance.ageing, #appearanceOptions.ageing.labels)
 end
 
+-- Chargement des options au démarrage
 refreshWardrobeOptions()
 refreshPropOptions()
 refreshAppearanceOptions()
@@ -441,11 +445,12 @@ local function applyModel(model)
     SetPlayerModel(PlayerId(), hash)
     SetModelAsNoLongerNeeded(hash)
 
+    -- Rafraîchir les options après changement de ped
     refreshWardrobeOptions()
     refreshPropOptions()
     refreshAppearanceOptions()
 
-    -- Re-apply the customization after swapping ped models
+    -- Re-appliquer la customisation
     applyHeritage()
     applyFaceFeatures()
     applyPedAppearance()
@@ -687,6 +692,7 @@ RageUI.CreateWhile(1.0, function()
                     if Selected then
                         data.saved = not data.saved
                         data.note = data.saved and "Sauvegardé" or "Vide"
+                        -- Ici tu pourras plus tard lier à un système de sauvegarde réel
                     end
                 end)
             end
@@ -703,7 +709,7 @@ RageUI.CreateWhile(1.0, function()
             end)
             RageUI.Button("Sauvegarder", "Enregistrer dans le profil sélectionné.", { RightLabel = "ENREGISTRER" }, true, function(_, _, Selected)
                 if Selected then
-                    -- Logique de sauvegarde à implémenter
+                    -- Logique de sauvegarde à implémenter (ex: TriggerServerEvent vers qb-core / skin / etc.)
                 end
             end)
             RageUI.Button("Charger", "Charger le profil sélectionné.", { RightLabel = "CHARGER" }, true, function(_, _, Selected)
