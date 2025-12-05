@@ -317,19 +317,6 @@ local function normalizedNote(entry)
     return "Sans note"
 end
 
-local function saveOutfit(slot)
-    local entry = outfits[slot]
-    if not entry then return end
-
-    if entry.note == "Vide" or entry.note == '' then
-        entry.note = "Sauvegardé"
-    end
-
-    TriggerServerEvent('rageui:appearance:saveOutfit', slot, buildOutfitPayload(slot))
-end
-
-refreshPersistenceSlots()
-
 local function buildComponentOptions(componentId, includeNone)
     local ped = getPlayerPed()
     local labels = {}
@@ -547,6 +534,19 @@ local function buildOutfitPayload(slot)
         props = buildPropsSnapshot(),
     }
 end
+
+local function saveOutfit(slot)
+    local entry = outfits[slot]
+    if not entry then return end
+
+    if entry.note == "Vide" or entry.note == '' then
+        entry.note = "Sauvegardé"
+    end
+
+    TriggerServerEvent('rageui:appearance:saveOutfit', slot, buildOutfitPayload(slot))
+end
+
+refreshPersistenceSlots()
 
 local function applyWardrobeSnapshot(snapshot)
     if not snapshot then return end
